@@ -53,7 +53,7 @@ class Application extends Module
 	/**
 		Update events are dispatched each frame (usually just before rendering)
 	**/
-	public var onUpdate = new Event<Float->Void>();
+	public var onUpdate = new Event<Int->Void>();
 
 	/**
 		Dispatched when a new window has been created by this application
