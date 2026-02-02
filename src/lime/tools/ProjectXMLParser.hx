@@ -1172,6 +1172,10 @@ class ProjectXMLParser extends HXProject
 						{
 							ArrayTools.addUnique(architectures, Reflect.field(Architecture, name.toUpperCase()));
 						}
+						else
+						{
+							Log.warn("Ignoring unknown architecture: " + name);
+						}
 					}
 
 					if (element.has.exclude)
@@ -1181,6 +1185,10 @@ class ProjectXMLParser extends HXProject
 						if (Reflect.hasField(Architecture, exclude.toUpperCase()))
 						{
 							ArrayTools.addUnique(excludeArchitectures, Reflect.field(Architecture, exclude.toUpperCase()));
+						}
+						else
+						{
+							Log.warn("Ignoring unknown architecture: " + exclude);
 						}
 					}
 
