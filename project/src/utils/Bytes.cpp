@@ -103,8 +103,11 @@ namespace lime {
 
 		if (size > 0) {
 
-			Resize (size);
-			int status = lime::fread (b, 1, size, file);
+			if (TryResize (size)) {
+
+				lime::fread (b, 1, size, file);
+
+			}
 
 		}
 
@@ -113,7 +116,7 @@ namespace lime {
 	}
 
 
-	void Bytes::Resize (int size) {
+	bool Bytes::TryResize (int size) {
 
 		if (size != length || (length > 0 && !b)) {
 
@@ -133,14 +136,25 @@ namespace lime {
 
 					}
 
-					b = 0;
-					length = 0;
+				} else if (usingValue.find (this) != usingValue.end ()) {
+
+					usingValue.erase (this);
 
 				}
+
+				b = 0;
+				length = 0;
 
 			} else {
 
 				unsigned char* data = (unsigned char*)malloc (sizeof (char) * size);
+
+				if (!data) {
+
+					mutex.Unlock ();
+					return false;
+
+				}
 
 				if (b) {
 
@@ -174,6 +188,15 @@ namespace lime {
 			mutex.Unlock ();
 
 		}
+
+		return (size == length || (size <= 0 && length == 0));
+
+	}
+
+
+	void Bytes::Resize (int size) {
+
+		TryResize (size);
 
 	}
 
@@ -226,23 +249,15 @@ namespace lime {
 
 		if (size > 0) {
 
-			Resize (size);
-			memcpy (b, &data[0], length);
+			if (TryResize (size)) {
 
-		} else {
-
-			mutex.Lock ();
-
-			if (usingValue.find (this) != usingValue.end ()) {
-
-				usingValue.erase (this);
+				memcpy (b, &data[0], length);
 
 			}
 
-			mutex.Unlock ();
+		} else {
 
-			b = 0;
-			length = 0;
+			TryResize (0);
 
 		}
 

@@ -300,6 +300,7 @@
 			<compilerflag value="-DHAVE_STDIO_H" unless="windows" />
 			<compilerflag value="-I${NATIVE_TOOLKIT_PATH}/sdl_sound/src/" />
 
+			<file name="src/media/SDLSoundBindings.cpp" />
 			<file name="src/media/SDLSound.cpp" />
 
 		</section>
