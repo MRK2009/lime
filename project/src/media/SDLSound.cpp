@@ -298,7 +298,7 @@ namespace lime {
 
 		}
 
-		return (streamInfo->duration > 0);
+		return (streamInfo->duration > 0 || (resource && resource->path != NULL));
 
 	}
 
