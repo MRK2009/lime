@@ -64,21 +64,23 @@ namespace lime {
 
 		mutex.Lock ();
 
-		if (hadValue.find (this) != hadValue.end ()) {
+		bool usingHaxeValue = (usingValue.find (this) != usingValue.end ());
 
-			hadValue.erase (this);
+		if (usingHaxeValue) {
 
-			if (usingValue.find (this) == usingValue.end () && b) {
-
-				free (b);
-
-			}
+			usingValue.erase (this);
 
 		}
 
-		if (usingValue.find (this) != usingValue.end ()) {
+		if (!usingHaxeValue && b) {
 
-			usingValue.erase (this);
+			free (b);
+
+		}
+
+		if (hadValue.find (this) != hadValue.end ()) {
+
+			hadValue.erase (this);
 
 		}
 
@@ -227,9 +229,30 @@ namespace lime {
 	
 	    //and now it should be save to lock
 	    mutex.Lock();
+
+	    bool usingHaxeValue = (usingValue.find(this) != usingValue.end());
+
+	    if (b) {
+
+	        if (usingHaxeValue) {
+
+	            usingValue.erase(this);
+	            usingHaxeValue = false;
+
+	        } else {
+
+	            free(b);
+
+	        }
+
+	    } else if (usingHaxeValue) {
+
+	        usingValue.erase(this);
+	        usingHaxeValue = false;
+
+	    }
 	
 	    if (isNull) {
-	        usingValue.erase(this);
 	        length = 0;
 	        b = 0;
 	    } else {
