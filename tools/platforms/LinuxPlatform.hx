@@ -236,8 +236,9 @@ class LinuxPlatform extends PlatformTarget
 					"-I", Path.combine(targetDirectory, "obj"),
 					Path.combine(targetDirectory, "obj/ApplicationMain.c"),
 					"-L", applicationDirectory,
-					// gcc 14 made incompatible-pointer-types an error instead
-					// of a warning, but it's required for assignment to Dynamic
+					// gcc 14 and clang 22 made incompatible-pointer-types an
+					// error instead of a warning, but it's required for
+					// assignment to Dynamic in Haxe
 					"-Wno-error=incompatible-pointer-types"
 				];
 				for (file in System.readDirectory(applicationDirectory))
