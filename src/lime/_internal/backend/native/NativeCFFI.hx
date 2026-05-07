@@ -7062,3 +7062,30 @@ class NativeCFFI
 	#end
 	#end
 }
+	@:cffi private static function lime_font_outline_decompose_no_hint(handle:Dynamic, size:Int):Dynamic;
+
+	@:cffi private static function lime_font_render_glyph_with_flags(handle:Dynamic, index:Int, loadFlags:Int, data:Dynamic):Dynamic;
+
+	private static var lime_font_outline_decompose_no_hint = new cpp.Callable<cpp.Object->Int->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_font_outline_decompose_no_hint", "oio", false));
+	private static var lime_font_render_glyph_with_flags = new cpp.Callable<cpp.Object->Int->Int->cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_font_render_glyph_with_flags", "oiioo", false));
+	private static var lime_font_outline_decompose_no_hint = CFFI.load("lime", "lime_font_outline_decompose_no_hint", 2);
+	private static var lime_font_render_glyph_with_flags = CFFI.load("lime", "lime_font_render_glyph_with_flags", 4);
+	@:hlNative("lime", "hl_font_outline_decompose_no_hint") private static function lime_font_outline_decompose_no_hint(handle:CFFIPointer, size:Int):Dynamic
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_font_render_glyph_with_flags") private static function lime_font_render_glyph_with_flags(handle:CFFIPointer, index:Int,
+			loadFlags:Int, data:Bytes):Bytes
+	{
+		return null;
+	}
+
+	@:cffi private static function lime_hb_ft_font_changed(font:CFFIPointer):Void;
+
+	private static var lime_hb_ft_font_changed = new cpp.Callable<cpp.Object->cpp.Void>(cpp.Prime._loadPrime("lime", "lime_hb_ft_font_changed", "ov", false));
+	private static var lime_hb_ft_font_changed:Dynamic->Void = CFFI.load("lime", "lime_hb_ft_font_changed", 1);
+	@:hlNative("lime", "hl_hb_ft_font_changed") private static function lime_hb_ft_font_changed(font:CFFIPointer):Void {}
+
