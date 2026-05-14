@@ -222,18 +222,16 @@ class PlatformTarget
 				System.mkdir(Path.directory(path));
 				AssetHelper.copyAsset(asset, path, project.templateContext);
 			}
-			else if (asset.embed == true)
+			else
 			{
-				if (asset.sourcePath == "")
+				if (asset.embed == true && asset.sourcePath == "")
 				{
 					var path = Path.combine(embedDirectory, asset.targetPath);
 					System.mkdir(Path.directory(path));
 					AssetHelper.copyAsset(asset, path);
 					asset.sourcePath = path;
 				}
-			}
-			else
-			{
+
 				var path = Path.combine(assetDirectory, asset.targetPath);
 				System.mkdir(Path.directory(path));
 				AssetHelper.copyAssetIfNewer(asset, path);
