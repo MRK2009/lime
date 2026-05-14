@@ -447,21 +447,7 @@ class WebAssemblyPlatform extends PlatformTarget
 		// ProjectHelper.recursiveSmartCopyTemplate(project, "webassembly/cpp", targetDirectory + "/obj", context);
 		ProjectHelper.recursiveSmartCopyTemplate(project, "cpp/static", targetDirectory + "/obj", context);
 
-		for (asset in project.assets)
-		{
-			var path = Path.combine(destination, asset.targetPath);
-
-			if (asset.type == AssetType.TEMPLATE)
-			{
-				System.mkdir(Path.directory(path));
-				AssetHelper.copyAsset(asset, path, context);
-			}
-            else
-            {
-                System.mkdir(Path.directory(path));
-                AssetHelper.copyAsset(asset, path, context);
-            }
-		}
+		copyProjectAssets(destination);
 	}
 
 	@ignore public override function install():Void {}
