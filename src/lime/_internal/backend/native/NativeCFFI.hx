@@ -328,6 +328,8 @@ class NativeCFFI
 
 	@:cffi private static function lime_window_get_context_type(handle:Dynamic):Dynamic;
 
+	@:cffi private static function lime_window_create_vulkan_surface(handle:Dynamic, instanceHigh:Int, instanceLow:Int):Dynamic;
+
 	@:cffi private static function lime_window_get_display(handle:Dynamic):Int;
 
 	@:cffi private static function lime_window_get_display_mode(handle:Dynamic):Dynamic;
@@ -343,6 +345,38 @@ class NativeCFFI
 	@:cffi private static function lime_window_get_scale(handle:Dynamic):Float;
 
 	@:cffi private static function lime_window_get_text_input_enabled(handle:Dynamic):Bool;
+
+	@:cffi private static function lime_window_get_vulkan_drawable_size(handle:Dynamic):Dynamic;
+
+	@:cffi private static function lime_window_get_vulkan_instance_extensions(handle:Dynamic):Array<String>;
+
+	@:cffi private static function lime_window_get_vulkan_instance_proc_addr(handle:Dynamic):Dynamic;
+
+	@:cffi private static function lime_vk_create_instance(handle:Dynamic, applicationName:String):Dynamic;
+
+	@:cffi private static function lime_vk_destroy_instance(handle:Dynamic, instanceHigh:Int, instanceLow:Int):Void;
+
+	@:cffi private static function lime_vk_destroy_surface(handle:Dynamic, instanceHigh:Int, instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):Void;
+
+	@:cffi private static function lime_vk_get_physical_devices(handle:Dynamic, instanceHigh:Int, instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):Dynamic;
+
+	@:cffi private static function lime_vk_get_last_error():Dynamic;
+
+	@:cffi private static function lime_vulkan_renderer_create(handle:Dynamic, applicationName:String):CFFIPointer;
+
+	@:cffi private static function lime_vulkan_renderer_destroy(handle:Dynamic):Void;
+
+	@:cffi private static function lime_vulkan_renderer_get_info(handle:Dynamic):Dynamic;
+
+	@:cffi private static function lime_vulkan_renderer_get_last_error():Dynamic;
+
+	@:cffi private static function lime_vulkan_renderer_set_overlay(handle:Dynamic, bytes:Dynamic, width:Int, height:Int, x:Int, y:Int):Bool;
+
+	@:cffi private static function lime_vulkan_renderer_clear_overlay(handle:Dynamic):Bool;
+
+	@:cffi private static function lime_vulkan_renderer_render(handle:Dynamic, red:Float, green:Float, blue:Float, alpha:Float):Bool;
+
+	@:cffi private static function lime_vulkan_renderer_resize(handle:Dynamic):Bool;
 
 	@:cffi private static function lime_window_get_width(handle:Dynamic):Int;
 
@@ -633,6 +667,8 @@ class NativeCFFI
 	private static var lime_window_get_context = new cpp.Callable<cpp.Object->Float>(cpp.Prime._loadPrime("lime", "lime_window_get_context", "od", false));
 	private static var lime_window_get_context_type = new cpp.Callable<cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime", "lime_window_get_context_type",
 		"oo", false));
+	private static var lime_window_create_vulkan_surface = new cpp.Callable<cpp.Object->Int->Int->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_window_create_vulkan_surface", "oiio", false));
 	private static var lime_window_get_display = new cpp.Callable<cpp.Object->Int>(cpp.Prime._loadPrime("lime", "lime_window_get_display", "oi", false));
 	private static var lime_window_get_display_mode = new cpp.Callable<cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime", "lime_window_get_display_mode",
 		"oo", false));
@@ -644,6 +680,38 @@ class NativeCFFI
 	private static var lime_window_get_scale = new cpp.Callable<cpp.Object->Float>(cpp.Prime._loadPrime("lime", "lime_window_get_scale", "od", false));
 	private static var lime_window_get_text_input_enabled = new cpp.Callable<cpp.Object->Bool>(cpp.Prime._loadPrime("lime",
 		"lime_window_get_text_input_enabled", "ob", false));
+	private static var lime_window_get_vulkan_drawable_size = new cpp.Callable<cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_window_get_vulkan_drawable_size", "oo", false));
+	private static var lime_window_get_vulkan_instance_extensions = new cpp.Callable<cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_window_get_vulkan_instance_extensions", "oo", false));
+	private static var lime_window_get_vulkan_instance_proc_addr = new cpp.Callable<cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_window_get_vulkan_instance_proc_addr", "oo", false));
+	private static var lime_vk_create_instance = new cpp.Callable<cpp.Object->String->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_vk_create_instance", "oso", false));
+	private static var lime_vk_destroy_instance = new cpp.Callable<cpp.Object->Int->Int->cpp.Void>(cpp.Prime._loadPrime("lime",
+		"lime_vk_destroy_instance", "oiiv", false));
+	private static var lime_vk_destroy_surface = new cpp.Callable<cpp.Object->Int->Int->Int->Int->cpp.Void>(cpp.Prime._loadPrime("lime",
+		"lime_vk_destroy_surface", "oiiiiv", false));
+	private static var lime_vk_get_physical_devices = new cpp.Callable<cpp.Object->Int->Int->Int->Int->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_vk_get_physical_devices", "oiiiio", false));
+	private static var lime_vk_get_last_error = new cpp.Callable<Void->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_vk_get_last_error", "o", false));
+	private static var lime_vulkan_renderer_create = new cpp.Callable<cpp.Object->String->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_create", "oso", false));
+	private static var lime_vulkan_renderer_destroy = new cpp.Callable<cpp.Object->cpp.Void>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_destroy", "ov", false));
+	private static var lime_vulkan_renderer_get_info = new cpp.Callable<cpp.Object->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_get_info", "oo", false));
+	private static var lime_vulkan_renderer_get_last_error = new cpp.Callable<Void->cpp.Object>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_get_last_error", "o", false));
+	private static var lime_vulkan_renderer_set_overlay = new cpp.Callable<cpp.Object->cpp.Object->Int->Int->Int->Int->Bool>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_set_overlay", "ooiiiib", false));
+	private static var lime_vulkan_renderer_clear_overlay = new cpp.Callable<cpp.Object->Bool>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_clear_overlay", "ob", false));
+	private static var lime_vulkan_renderer_render = new cpp.Callable<cpp.Object->Float->Float->Float->Float->Bool>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_render", "oddddb", false));
+	private static var lime_vulkan_renderer_resize = new cpp.Callable<cpp.Object->Bool>(cpp.Prime._loadPrime("lime",
+		"lime_vulkan_renderer_resize", "ob", false));
 	private static var lime_window_get_width = new cpp.Callable<cpp.Object->Int>(cpp.Prime._loadPrime("lime", "lime_window_get_width", "oi", false));
 	private static var lime_window_get_x = new cpp.Callable<cpp.Object->Int>(cpp.Prime._loadPrime("lime", "lime_window_get_x", "oi", false));
 	private static var lime_window_get_y = new cpp.Callable<cpp.Object->Int>(cpp.Prime._loadPrime("lime", "lime_window_get_y", "oi", false));
@@ -831,6 +899,7 @@ class NativeCFFI
 	private static var lime_window_focus = CFFI.load("lime", "lime_window_focus", 1);
 	private static var lime_window_get_context = CFFI.load("lime", "lime_window_get_context", 1);
 	private static var lime_window_get_context_type = CFFI.load("lime", "lime_window_get_context_type", 1);
+	private static var lime_window_create_vulkan_surface = CFFI.load("lime", "lime_window_create_vulkan_surface", 3);
 	private static var lime_window_get_display = CFFI.load("lime", "lime_window_get_display", 1);
 	private static var lime_window_get_display_mode = CFFI.load("lime", "lime_window_get_display_mode", 1);
 	private static var lime_window_get_height = CFFI.load("lime", "lime_window_get_height", 1);
@@ -839,6 +908,22 @@ class NativeCFFI
 	private static var lime_window_get_opacity = CFFI.load("lime", "lime_window_get_opacity", 1);
 	private static var lime_window_get_scale = CFFI.load("lime", "lime_window_get_scale", 1);
 	private static var lime_window_get_text_input_enabled = CFFI.load("lime", "lime_window_get_text_input_enabled", 1);
+	private static var lime_window_get_vulkan_drawable_size = CFFI.load("lime", "lime_window_get_vulkan_drawable_size", 1);
+	private static var lime_window_get_vulkan_instance_extensions = CFFI.load("lime", "lime_window_get_vulkan_instance_extensions", 1);
+	private static var lime_window_get_vulkan_instance_proc_addr = CFFI.load("lime", "lime_window_get_vulkan_instance_proc_addr", 1);
+	private static var lime_vk_create_instance = CFFI.load("lime", "lime_vk_create_instance", 2);
+	private static var lime_vk_destroy_instance = CFFI.load("lime", "lime_vk_destroy_instance", 3);
+	private static var lime_vk_destroy_surface = CFFI.load("lime", "lime_vk_destroy_surface", 5);
+	private static var lime_vk_get_physical_devices = CFFI.load("lime", "lime_vk_get_physical_devices", 5);
+	private static var lime_vk_get_last_error = CFFI.load("lime", "lime_vk_get_last_error", 0);
+	private static var lime_vulkan_renderer_create = CFFI.load("lime", "lime_vulkan_renderer_create", 2);
+	private static var lime_vulkan_renderer_destroy = CFFI.load("lime", "lime_vulkan_renderer_destroy", 1);
+	private static var lime_vulkan_renderer_get_info = CFFI.load("lime", "lime_vulkan_renderer_get_info", 1);
+	private static var lime_vulkan_renderer_get_last_error = CFFI.load("lime", "lime_vulkan_renderer_get_last_error", 0);
+	private static var lime_vulkan_renderer_set_overlay = CFFI.load("lime", "lime_vulkan_renderer_set_overlay", 6);
+	private static var lime_vulkan_renderer_clear_overlay = CFFI.load("lime", "lime_vulkan_renderer_clear_overlay", 1);
+	private static var lime_vulkan_renderer_render = CFFI.load("lime", "lime_vulkan_renderer_render", 5);
+	private static var lime_vulkan_renderer_resize = CFFI.load("lime", "lime_vulkan_renderer_resize", 1);
 	private static var lime_window_get_width = CFFI.load("lime", "lime_window_get_width", 1);
 	private static var lime_window_get_x = CFFI.load("lime", "lime_window_get_x", 1);
 	private static var lime_window_get_y = CFFI.load("lime", "lime_window_get_y", 1);
@@ -1431,6 +1516,12 @@ class NativeCFFI
 		return null;
 	}
 
+	@:hlNative("lime", "hl_window_create_vulkan_surface") private static function lime_window_create_vulkan_surface(handle:CFFIPointer,
+			instanceHigh:Int, instanceLow:Int):Dynamic
+	{
+		return null;
+	}
+
 	@:hlNative("lime", "hl_window_get_display") private static function lime_window_get_display(handle:CFFIPointer):Int
 	{
 		return 0;
@@ -1459,6 +1550,84 @@ class NativeCFFI
 	}
 
 	@:hlNative("lime", "hl_window_get_text_input_enabled") private static function lime_window_get_text_input_enabled(handle:CFFIPointer):Bool
+	{
+		return false;
+	}
+
+	@:hlNative("lime", "hl_window_get_vulkan_drawable_size") private static function lime_window_get_vulkan_drawable_size(handle:CFFIPointer):Dynamic
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_window_get_vulkan_instance_extensions") private static function lime_window_get_vulkan_instance_extensions(
+			handle:CFFIPointer):hl.NativeArray<hl.Bytes>
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_window_get_vulkan_instance_proc_addr") private static function lime_window_get_vulkan_instance_proc_addr(handle:CFFIPointer):Dynamic
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vk_create_instance") private static function lime_vk_create_instance(handle:CFFIPointer, applicationName:String):Dynamic
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vk_destroy_instance") private static function lime_vk_destroy_instance(handle:CFFIPointer, instanceHigh:Int,
+			instanceLow:Int):Void {}
+
+	@:hlNative("lime", "hl_vk_destroy_surface") private static function lime_vk_destroy_surface(handle:CFFIPointer, instanceHigh:Int,
+			instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):Void {}
+
+	@:hlNative("lime", "hl_vk_get_physical_devices") private static function lime_vk_get_physical_devices(handle:CFFIPointer, instanceHigh:Int,
+			instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):Dynamic
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vk_get_last_error") private static function lime_vk_get_last_error():hl.Bytes
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_create") private static function lime_vulkan_renderer_create(handle:CFFIPointer,
+			applicationName:String):CFFIPointer
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_destroy") private static function lime_vulkan_renderer_destroy(handle:CFFIPointer):Void {}
+
+	@:hlNative("lime", "hl_vulkan_renderer_get_info") private static function lime_vulkan_renderer_get_info(handle:CFFIPointer):hl.Bytes
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_get_last_error") private static function lime_vulkan_renderer_get_last_error():hl.Bytes
+	{
+		return null;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_set_overlay") private static function lime_vulkan_renderer_set_overlay(handle:CFFIPointer,
+			bytes:hl.Bytes, width:Int, height:Int, x:Int, y:Int):Bool
+	{
+		return false;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_clear_overlay") private static function lime_vulkan_renderer_clear_overlay(handle:CFFIPointer):Bool
+	{
+		return false;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_render") private static function lime_vulkan_renderer_render(handle:CFFIPointer, red:Float, green:Float,
+			blue:Float, alpha:Float):Bool
+	{
+		return false;
+	}
+
+	@:hlNative("lime", "hl_vulkan_renderer_resize") private static function lime_vulkan_renderer_resize(handle:CFFIPointer):Bool
 	{
 		return false;
 	}

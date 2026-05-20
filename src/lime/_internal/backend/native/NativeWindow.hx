@@ -14,6 +14,7 @@ import lime.graphics.Image;
 import lime.graphics.ImageBuffer;
 import lime.graphics.OpenGLRenderContext;
 import lime.graphics.RenderContext;
+import lime.graphics.VulkanRenderContext;
 import lime.math.Rectangle;
 import lime.math.Vector2;
 import lime.system.CFFI;
@@ -79,9 +80,13 @@ class NativeWindow
 		contextAttributes.vsync = (resolvedVSyncMode != VSyncMode.Off);
 
 		#if (cairo || (!lime_opengl && !lime_opengles))
-		contextAttributes.type = CAIRO;
+		if (!Reflect.hasField(contextAttributes, "type") || contextAttributes.type != VULKAN)
+		{
+			contextAttributes.type = CAIRO;
+		}
 		#end
 		if (Reflect.hasField(contextAttributes, "type") && contextAttributes.type == CAIRO) contextAttributes.hardware = false;
+		if (Reflect.hasField(contextAttributes, "type") && contextAttributes.type == VULKAN) contextAttributes.hardware = true;
 		if (Reflect.hasField(attributes, "allowHighDPI") && attributes.allowHighDPI) flags |= cast WindowFlags.WINDOW_FLAG_ALLOW_HIGHDPI;
 
 		if (Reflect.hasField(attributes, "alwaysOnTop") && attributes.alwaysOnTop) flags |= cast WindowFlags.WINDOW_FLAG_ALWAYS_ON_TOP;
@@ -106,6 +111,7 @@ class NativeWindow
 		if (contextAttributes.depth) flags |= cast WindowFlags.WINDOW_FLAG_DEPTH_BUFFER;
 
 		if (contextAttributes.hardware) flags |= cast WindowFlags.WINDOW_FLAG_HARDWARE;
+		if (Reflect.hasField(contextAttributes, "type") && contextAttributes.type == VULKAN) flags |= cast WindowFlags.WINDOW_FLAG_VULKAN;
 		if (contextAttributes.stencil) flags |= cast WindowFlags.WINDOW_FLAG_STENCIL_BUFFER;
 		if (contextAttributes.vsync) flags |= cast WindowFlags.WINDOW_FLAG_VSYNC;
 
@@ -156,6 +162,12 @@ class NativeWindow
 				{
 					GL.context = gl;
 				}
+			case "vulkan":
+				useHardware = true;
+				contextAttributes.hardware = true;
+				context.vulkan = new VulkanRenderContext(handle);
+				context.type = VULKAN;
+				context.version = Reflect.hasField(contextAttributes, "version") && contextAttributes.version != null ? contextAttributes.version : "";
 			default:
 				useHardware = false;
 
@@ -742,4 +754,5 @@ class NativeWindow
 	var WINDOW_FLAG_MAXIMIZED = 0x00004000;
 	var WINDOW_FLAG_ALWAYS_ON_TOP = 0x00008000;
 	var WINDOW_FLAG_COLOR_DEPTH_32_BIT = 0x00010000;
+	var WINDOW_FLAG_VULKAN = 0x00020000;
 }

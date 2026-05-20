@@ -16,6 +16,9 @@
 #include <graphics/Image.h>
 #include <graphics/ImageBuffer.h>
 #include <graphics/RenderEvent.h>
+#ifdef LIME_VULKAN
+#include <graphics/vulkan/VKRenderer.h>
+#endif
 #include <media/containers/OGG.h>
 #include <media/containers/WAV.h>
 #include <media/AudioBuffer.h>
@@ -57,6 +60,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #ifdef LIME_SDL_SOUND
 #include <media/SDLSound.h>
@@ -66,6 +70,178 @@ DEFINE_KIND (k_finalizer);
 
 
 namespace lime {
+
+	static std::string lastVulkanRendererError;
+	static std::string lastVKError;
+
+
+	static uint64_t CombineVulkanHandle (int high, int low) {
+
+		return ((uint64_t)(uint32_t)high << 32) | (uint32_t)low;
+
+	}
+
+
+	static value CreateVulkanHandleValue (uint64_t handleValue) {
+
+		value result = alloc_empty_object ();
+		alloc_field (result, val_id ("low"), alloc_int ((int32_t)(handleValue & 0xFFFFFFFFULL)));
+		alloc_field (result, val_id ("high"), alloc_int ((int32_t)(handleValue >> 32)));
+		return result;
+
+	}
+
+
+	static vdynamic* HLCreateVulkanHandleValue (uint64_t handleValue) {
+
+		const int id_low = hl_hash_utf8 ("low");
+		const int id_high = hl_hash_utf8 ("high");
+		vdynamic* result = (vdynamic*)hl_alloc_dynobj ();
+		hl_dyn_seti (result, id_low, &hlt_i32, (int32_t)(handleValue & 0xFFFFFFFFULL));
+		hl_dyn_seti (result, id_high, &hlt_i32, (int32_t)(handleValue >> 32));
+		return result;
+
+	}
+
+
+#ifdef LIME_VULKAN
+	static VkSurfaceKHR UInt64ToVulkanSurface (uint64_t value) {
+
+		return (VkSurfaceKHR)value;
+
+	}
+
+
+	static bool CreateManagedVulkanInstance (Window* targetWindow, const char* applicationName, VkInstance* outInstance) {
+
+		if (!targetWindow || !outInstance) {
+
+			lastVKError = "Missing Vulkan window or output instance";
+			return false;
+
+		}
+
+		*outInstance = VK_NULL_HANDLE;
+
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr ();
+		if (!vkGetInstanceProcAddr) {
+
+			lastVKError = "SDL did not expose vkGetInstanceProcAddr";
+			return false;
+
+		}
+
+		PFN_vkCreateInstance vkCreateInstance = (PFN_vkCreateInstance)vkGetInstanceProcAddr (VK_NULL_HANDLE, "vkCreateInstance");
+		PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties =
+			(PFN_vkEnumerateInstanceExtensionProperties)vkGetInstanceProcAddr (VK_NULL_HANDLE, "vkEnumerateInstanceExtensionProperties");
+		PFN_vkEnumerateInstanceVersion vkEnumerateInstanceVersion =
+			(PFN_vkEnumerateInstanceVersion)vkGetInstanceProcAddr (VK_NULL_HANDLE, "vkEnumerateInstanceVersion");
+
+		if (!vkCreateInstance || !vkEnumerateInstanceExtensionProperties) {
+
+			lastVKError = "Missing required Vulkan global functions";
+			return false;
+
+		}
+
+		unsigned int requiredExtensionCount = 0;
+		if (!targetWindow->GetVulkanInstanceExtensions (&requiredExtensionCount, 0)) {
+
+			lastVKError = "Failed to query required Vulkan window extensions";
+			return false;
+
+		}
+
+		std::vector<const char*> requiredExtensions (requiredExtensionCount);
+		if (requiredExtensionCount > 0 && !targetWindow->GetVulkanInstanceExtensions (&requiredExtensionCount, requiredExtensions.data ())) {
+
+			lastVKError = "Failed to fetch required Vulkan window extensions";
+			return false;
+
+		}
+
+		std::vector<const char*> instanceExtensions;
+		for (size_t i = 0; i < requiredExtensions.size (); ++i) {
+
+			instanceExtensions.push_back (requiredExtensions[i]);
+
+		}
+
+		bool portabilityEnumerationSupported = false;
+		uint32_t availableExtensionCount = 0;
+		if (vkEnumerateInstanceExtensionProperties (0, &availableExtensionCount, 0) == VK_SUCCESS && availableExtensionCount > 0) {
+
+			std::vector<VkExtensionProperties> availableExtensions (availableExtensionCount);
+			if (vkEnumerateInstanceExtensionProperties (0, &availableExtensionCount, availableExtensions.data ()) == VK_SUCCESS) {
+
+				for (size_t i = 0; i < availableExtensions.size (); ++i) {
+
+					#ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+					if (strcmp (availableExtensions[i].extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) == 0) {
+
+						portabilityEnumerationSupported = true;
+
+					}
+					#endif
+
+				}
+
+			}
+
+		}
+
+		if (portabilityEnumerationSupported) {
+
+			#ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+			instanceExtensions.push_back (VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+			#endif
+
+		}
+
+		uint32_t instanceVersion = VK_API_VERSION_1_0;
+		if (vkEnumerateInstanceVersion) {
+
+			vkEnumerateInstanceVersion (&instanceVersion);
+
+		}
+
+		VkApplicationInfo applicationInfo;
+		memset (&applicationInfo, 0, sizeof (applicationInfo));
+		applicationInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		applicationInfo.pApplicationName = applicationName ? applicationName : "Lime";
+		applicationInfo.pEngineName = "Lime";
+		applicationInfo.applicationVersion = VK_MAKE_VERSION (1, 0, 0);
+		applicationInfo.engineVersion = VK_MAKE_VERSION (1, 0, 0);
+		applicationInfo.apiVersion = instanceVersion >= VK_API_VERSION_1_0 ? VK_API_VERSION_1_0 : instanceVersion;
+
+		VkInstanceCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		createInfo.pApplicationInfo = &applicationInfo;
+		createInfo.enabledExtensionCount = (uint32_t)instanceExtensions.size ();
+		createInfo.ppEnabledExtensionNames = instanceExtensions.empty () ? 0 : instanceExtensions.data ();
+
+		#ifdef VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+		if (portabilityEnumerationSupported) {
+
+			createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+
+		}
+		#endif
+
+		VkResult result = vkCreateInstance (&createInfo, 0, outInstance);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateInstance failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+
+	}
+#endif
 
 
 	void gc_application (value handle) {
@@ -3533,6 +3709,889 @@ namespace lime {
 	}
 
 
+	value lime_window_get_vulkan_instance_extensions (value window) {
+
+		Window* targetWindow = (Window*)val_data (window);
+		unsigned int count = 0;
+
+		if (!targetWindow->GetVulkanInstanceExtensions (&count, 0) || count == 0) {
+
+			return alloc_array (0);
+
+		}
+
+		std::vector<const char*> names (count);
+		if (!targetWindow->GetVulkanInstanceExtensions (&count, names.data ())) {
+
+			return alloc_array (0);
+
+		}
+
+		value result = alloc_array (count);
+
+		for (unsigned int i = 0; i < count; ++i) {
+
+			val_array_set_i (result, i, alloc_string (names[i]));
+
+		}
+
+		return result;
+
+	}
+
+
+	HL_PRIM hl_varray* HL_NAME(hl_window_get_vulkan_instance_extensions) (HL_CFFIPointer* window) {
+
+		Window* targetWindow = (Window*)window->ptr;
+		unsigned int count = 0;
+
+		if (!targetWindow->GetVulkanInstanceExtensions (&count, 0) || count == 0) {
+
+			return hl_alloc_array (&hlt_bytes, 0);
+
+		}
+
+		std::vector<const char*> names (count);
+		if (!targetWindow->GetVulkanInstanceExtensions (&count, names.data ())) {
+
+			return hl_alloc_array (&hlt_bytes, 0);
+
+		}
+
+		hl_varray* result = (hl_varray*)hl_alloc_array (&hlt_bytes, count);
+		vbyte** resultData = hl_aptr (result, vbyte*);
+
+		for (unsigned int i = 0; i < count; ++i) {
+
+			*resultData++ = hl_copy_bytes ((const vbyte*)names[i], (int)std::strlen (names[i]) + 1);
+
+		}
+
+		return result;
+
+	}
+
+
+	value lime_window_get_vulkan_drawable_size (value window) {
+
+		Window* targetWindow = (Window*)val_data (window);
+		int width = 0;
+		int height = 0;
+		targetWindow->GetVulkanDrawableSize (&width, &height);
+
+		value result = alloc_empty_object ();
+		alloc_field (result, val_id ("width"), alloc_int (width));
+		alloc_field (result, val_id ("height"), alloc_int (height));
+		return result;
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_window_get_vulkan_drawable_size) (HL_CFFIPointer* window) {
+
+		Window* targetWindow = (Window*)window->ptr;
+		int width = 0;
+		int height = 0;
+		targetWindow->GetVulkanDrawableSize (&width, &height);
+
+		const int id_width = hl_hash_utf8 ("width");
+		const int id_height = hl_hash_utf8 ("height");
+		vdynamic* result = (vdynamic*)hl_alloc_dynobj();
+		hl_dyn_seti (result, id_width, &hlt_i32, width);
+		hl_dyn_seti (result, id_height, &hlt_i32, height);
+		return result;
+
+	}
+
+
+	value lime_window_get_vulkan_instance_proc_addr (value window) {
+
+		Window* targetWindow = (Window*)val_data (window);
+		return CreateVulkanHandleValue ((uint64_t)(uintptr_t)targetWindow->GetVulkanInstanceProcAddr ());
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_window_get_vulkan_instance_proc_addr) (HL_CFFIPointer* window) {
+
+		Window* targetWindow = (Window*)window->ptr;
+		return HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)targetWindow->GetVulkanInstanceProcAddr ());
+
+	}
+
+
+	value lime_window_create_vulkan_surface (value window, int instanceHigh, int instanceLow) {
+
+		Window* targetWindow = (Window*)val_data (window);
+		uint64_t surface = targetWindow->CreateVulkanSurface ((uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow));
+
+		if (!surface) {
+
+			return alloc_null ();
+
+		}
+
+		return CreateVulkanHandleValue (surface);
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_window_create_vulkan_surface) (HL_CFFIPointer* window, int instanceHigh, int instanceLow) {
+
+		Window* targetWindow = (Window*)window->ptr;
+		uint64_t surface = targetWindow->CreateVulkanSurface ((uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow));
+
+		if (!surface) {
+
+			return 0;
+
+		}
+
+		return HLCreateVulkanHandleValue (surface);
+
+	}
+
+
+	value lime_vk_create_instance (value window, HxString applicationName) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = VK_NULL_HANDLE;
+
+		if (!CreateManagedVulkanInstance (targetWindow, applicationName.c_str () ? hxs_utf8 (applicationName, nullptr) : 0, &instance)) {
+
+			return alloc_null ();
+
+		}
+
+		return CreateVulkanHandleValue ((uint64_t)(uintptr_t)instance);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+#endif
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_vk_create_instance) (HL_CFFIPointer* window, hl_vstring* applicationName) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = VK_NULL_HANDLE;
+		const char* applicationNameUTF8 = applicationName ? (const char*)hl_to_utf8 ((const uchar*)applicationName->bytes) : 0;
+
+		if (!CreateManagedVulkanInstance (targetWindow, applicationNameUTF8, &instance)) {
+
+			return 0;
+
+		}
+
+		return HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)instance);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return 0;
+#endif
+
+	}
+
+
+	void lime_vk_destroy_instance (value window, int instanceHigh, int instanceLow) {
+
+#ifdef LIME_VULKAN
+		if (instanceHigh == 0 && instanceLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr) return;
+
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		PFN_vkDestroyInstance vkDestroyInstance = (PFN_vkDestroyInstance)vkGetInstanceProcAddr (instance, "vkDestroyInstance");
+		if (vkDestroyInstance) {
+
+			vkDestroyInstance (instance, 0);
+
+		}
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_destroy_instance) (HL_CFFIPointer* window, int instanceHigh, int instanceLow) {
+
+#ifdef LIME_VULKAN
+		if (instanceHigh == 0 && instanceLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr) return;
+
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		PFN_vkDestroyInstance vkDestroyInstance = (PFN_vkDestroyInstance)vkGetInstanceProcAddr (instance, "vkDestroyInstance");
+		if (vkDestroyInstance) {
+
+			vkDestroyInstance (instance, 0);
+
+		}
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	void lime_vk_destroy_surface (value window, int instanceHigh, int instanceLow, int surfaceHigh, int surfaceLow) {
+
+#ifdef LIME_VULKAN
+		if (instanceHigh == 0 && instanceLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr) return;
+
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkSurfaceKHR surface = UInt64ToVulkanSurface (CombineVulkanHandle (surfaceHigh, surfaceLow));
+		if (!surface) return;
+
+		PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkGetInstanceProcAddr (instance, "vkDestroySurfaceKHR");
+		if (vkDestroySurfaceKHR) {
+
+			vkDestroySurfaceKHR (instance, surface, 0);
+
+		}
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_destroy_surface) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int surfaceHigh, int surfaceLow) {
+
+#ifdef LIME_VULKAN
+		if (instanceHigh == 0 && instanceLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr) return;
+
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkSurfaceKHR surface = UInt64ToVulkanSurface (CombineVulkanHandle (surfaceHigh, surfaceLow));
+		if (!surface) return;
+
+		PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR = (PFN_vkDestroySurfaceKHR)vkGetInstanceProcAddr (instance, "vkDestroySurfaceKHR");
+		if (vkDestroySurfaceKHR) {
+
+			vkDestroySurfaceKHR (instance, surface, 0);
+
+		}
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	value lime_vk_get_physical_devices (value window, int instanceHigh, int instanceLow, int surfaceHigh, int surfaceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+
+		if (!targetWindow || !instance) {
+
+			lastVKError = "Missing Vulkan window or instance";
+			return alloc_null ();
+
+		}
+
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr ();
+		if (!vkGetInstanceProcAddr) {
+
+			lastVKError = "SDL did not expose vkGetInstanceProcAddr";
+			return alloc_null ();
+
+		}
+
+		PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)vkGetInstanceProcAddr (instance,
+			"vkEnumeratePhysicalDevices");
+		PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = (PFN_vkGetPhysicalDeviceProperties)vkGetInstanceProcAddr (instance,
+			"vkGetPhysicalDeviceProperties");
+		PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
+			(PFN_vkGetPhysicalDeviceQueueFamilyProperties)vkGetInstanceProcAddr (instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+		PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR =
+			(PFN_vkGetPhysicalDeviceSurfaceSupportKHR)vkGetInstanceProcAddr (instance, "vkGetPhysicalDeviceSurfaceSupportKHR");
+
+		if (!vkEnumeratePhysicalDevices || !vkGetPhysicalDeviceProperties || !vkGetPhysicalDeviceQueueFamilyProperties) {
+
+			lastVKError = "Missing required Vulkan instance functions";
+			return alloc_null ();
+
+		}
+
+		VkSurfaceKHR surface = UInt64ToVulkanSurface (CombineVulkanHandle (surfaceHigh, surfaceLow));
+		uint32_t deviceCount = 0;
+		VkResult result = vkEnumeratePhysicalDevices (instance, &deviceCount, 0);
+
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkEnumeratePhysicalDevices failed";
+			return alloc_null ();
+
+		}
+
+		value devices = alloc_array (deviceCount);
+		if (deviceCount == 0) {
+
+			lastVKError.clear ();
+			return devices;
+
+		}
+
+		std::vector<VkPhysicalDevice> physicalDevices (deviceCount);
+		result = vkEnumeratePhysicalDevices (instance, &deviceCount, physicalDevices.data ());
+
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkEnumeratePhysicalDevices returned incomplete data";
+			return alloc_null ();
+
+		}
+
+		const int id_handle = val_id ("handle");
+		const int id_name = val_id ("name");
+		const int id_apiVersion = val_id ("apiVersion");
+		const int id_driverVersion = val_id ("driverVersion");
+		const int id_vendorID = val_id ("vendorID");
+		const int id_deviceID = val_id ("deviceID");
+		const int id_deviceType = val_id ("deviceType");
+		const int id_queueFamilies = val_id ("queueFamilies");
+
+		const int id_index = val_id ("index");
+		const int id_flags = val_id ("flags");
+		const int id_queueCount = val_id ("queueCount");
+		const int id_timestampValidBits = val_id ("timestampValidBits");
+		const int id_supportsGraphics = val_id ("supportsGraphics");
+		const int id_supportsCompute = val_id ("supportsCompute");
+		const int id_supportsTransfer = val_id ("supportsTransfer");
+		const int id_supportsPresent = val_id ("supportsPresent");
+
+		for (uint32_t i = 0; i < deviceCount; ++i) {
+
+			VkPhysicalDeviceProperties properties;
+			memset (&properties, 0, sizeof (properties));
+			vkGetPhysicalDeviceProperties (physicalDevices[i], &properties);
+
+			uint32_t queueFamilyCount = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties (physicalDevices[i], &queueFamilyCount, 0);
+			std::vector<VkQueueFamilyProperties> queueFamilies (queueFamilyCount);
+			if (queueFamilyCount > 0) {
+
+				vkGetPhysicalDeviceQueueFamilyProperties (physicalDevices[i], &queueFamilyCount, queueFamilies.data ());
+
+			}
+
+			value queueFamilyArray = alloc_array (queueFamilyCount);
+
+			for (uint32_t q = 0; q < queueFamilyCount; ++q) {
+
+				VkBool32 supportsPresent = VK_FALSE;
+				if (surface && vkGetPhysicalDeviceSurfaceSupportKHR) {
+
+					vkGetPhysicalDeviceSurfaceSupportKHR (physicalDevices[i], q, surface, &supportsPresent);
+
+				}
+
+				value queueFamilyObject = alloc_empty_object ();
+				alloc_field (queueFamilyObject, id_index, alloc_int (q));
+				alloc_field (queueFamilyObject, id_flags, alloc_int (queueFamilies[q].queueFlags));
+				alloc_field (queueFamilyObject, id_queueCount, alloc_int (queueFamilies[q].queueCount));
+				alloc_field (queueFamilyObject, id_timestampValidBits, alloc_int (queueFamilies[q].timestampValidBits));
+				alloc_field (queueFamilyObject, id_supportsGraphics, alloc_bool ((queueFamilies[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0));
+				alloc_field (queueFamilyObject, id_supportsCompute, alloc_bool ((queueFamilies[q].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0));
+				alloc_field (queueFamilyObject, id_supportsTransfer, alloc_bool ((queueFamilies[q].queueFlags & VK_QUEUE_TRANSFER_BIT) != 0));
+				alloc_field (queueFamilyObject, id_supportsPresent, alloc_bool (supportsPresent != VK_FALSE));
+				val_array_set_i (queueFamilyArray, q, queueFamilyObject);
+
+			}
+
+			value deviceObject = alloc_empty_object ();
+			alloc_field (deviceObject, id_handle, CreateVulkanHandleValue ((uint64_t)(uintptr_t)physicalDevices[i]));
+			alloc_field (deviceObject, id_name, alloc_string (properties.deviceName));
+			alloc_field (deviceObject, id_apiVersion, alloc_int (properties.apiVersion));
+			alloc_field (deviceObject, id_driverVersion, alloc_int (properties.driverVersion));
+			alloc_field (deviceObject, id_vendorID, alloc_int (properties.vendorID));
+			alloc_field (deviceObject, id_deviceID, alloc_int (properties.deviceID));
+			alloc_field (deviceObject, id_deviceType, alloc_int (properties.deviceType));
+			alloc_field (deviceObject, id_queueFamilies, queueFamilyArray);
+			val_array_set_i (devices, i, deviceObject);
+
+		}
+
+		lastVKError.clear ();
+		return devices;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_array (0);
+#endif
+
+	}
+
+
+	HL_PRIM hl_varray* HL_NAME(hl_vk_get_physical_devices) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int surfaceHigh, int surfaceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+
+		if (!targetWindow || !instance) {
+
+			lastVKError = "Missing Vulkan window or instance";
+			return 0;
+
+		}
+
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr ();
+		if (!vkGetInstanceProcAddr) {
+
+			lastVKError = "SDL did not expose vkGetInstanceProcAddr";
+			return 0;
+
+		}
+
+		PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)vkGetInstanceProcAddr (instance,
+			"vkEnumeratePhysicalDevices");
+		PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = (PFN_vkGetPhysicalDeviceProperties)vkGetInstanceProcAddr (instance,
+			"vkGetPhysicalDeviceProperties");
+		PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
+			(PFN_vkGetPhysicalDeviceQueueFamilyProperties)vkGetInstanceProcAddr (instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+		PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR =
+			(PFN_vkGetPhysicalDeviceSurfaceSupportKHR)vkGetInstanceProcAddr (instance, "vkGetPhysicalDeviceSurfaceSupportKHR");
+
+		if (!vkEnumeratePhysicalDevices || !vkGetPhysicalDeviceProperties || !vkGetPhysicalDeviceQueueFamilyProperties) {
+
+			lastVKError = "Missing required Vulkan instance functions";
+			return 0;
+
+		}
+
+		VkSurfaceKHR surface = UInt64ToVulkanSurface (CombineVulkanHandle (surfaceHigh, surfaceLow));
+		uint32_t deviceCount = 0;
+		VkResult result = vkEnumeratePhysicalDevices (instance, &deviceCount, 0);
+
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkEnumeratePhysicalDevices failed";
+			return 0;
+
+		}
+
+		hl_varray* devices = (hl_varray*)hl_alloc_array (&hlt_dynobj, deviceCount);
+		if (deviceCount == 0) {
+
+			lastVKError.clear ();
+			return devices;
+
+		}
+
+		std::vector<VkPhysicalDevice> physicalDevices (deviceCount);
+		result = vkEnumeratePhysicalDevices (instance, &deviceCount, physicalDevices.data ());
+
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkEnumeratePhysicalDevices returned incomplete data";
+			return 0;
+
+		}
+
+		vdynamic** deviceData = hl_aptr (devices, vdynamic*);
+
+		const int id_handle = hl_hash_utf8 ("handle");
+		const int id_name = hl_hash_utf8 ("name");
+		const int id_apiVersion = hl_hash_utf8 ("apiVersion");
+		const int id_driverVersion = hl_hash_utf8 ("driverVersion");
+		const int id_vendorID = hl_hash_utf8 ("vendorID");
+		const int id_deviceID = hl_hash_utf8 ("deviceID");
+		const int id_deviceType = hl_hash_utf8 ("deviceType");
+		const int id_queueFamilies = hl_hash_utf8 ("queueFamilies");
+
+		const int id_index = hl_hash_utf8 ("index");
+		const int id_flags = hl_hash_utf8 ("flags");
+		const int id_queueCount = hl_hash_utf8 ("queueCount");
+		const int id_timestampValidBits = hl_hash_utf8 ("timestampValidBits");
+		const int id_supportsGraphics = hl_hash_utf8 ("supportsGraphics");
+		const int id_supportsCompute = hl_hash_utf8 ("supportsCompute");
+		const int id_supportsTransfer = hl_hash_utf8 ("supportsTransfer");
+		const int id_supportsPresent = hl_hash_utf8 ("supportsPresent");
+
+		for (uint32_t i = 0; i < deviceCount; ++i) {
+
+			VkPhysicalDeviceProperties properties;
+			memset (&properties, 0, sizeof (properties));
+			vkGetPhysicalDeviceProperties (physicalDevices[i], &properties);
+
+			uint32_t queueFamilyCount = 0;
+			vkGetPhysicalDeviceQueueFamilyProperties (physicalDevices[i], &queueFamilyCount, 0);
+			std::vector<VkQueueFamilyProperties> queueFamilies (queueFamilyCount);
+			if (queueFamilyCount > 0) {
+
+				vkGetPhysicalDeviceQueueFamilyProperties (physicalDevices[i], &queueFamilyCount, queueFamilies.data ());
+
+			}
+
+			hl_varray* queueFamilyArray = (hl_varray*)hl_alloc_array (&hlt_dynobj, queueFamilyCount);
+			vdynamic** queueFamilyData = hl_aptr (queueFamilyArray, vdynamic*);
+
+			for (uint32_t q = 0; q < queueFamilyCount; ++q) {
+
+				VkBool32 supportsPresent = VK_FALSE;
+				if (surface && vkGetPhysicalDeviceSurfaceSupportKHR) {
+
+					vkGetPhysicalDeviceSurfaceSupportKHR (physicalDevices[i], q, surface, &supportsPresent);
+
+				}
+
+				vdynamic* queueFamilyObject = (vdynamic*)hl_alloc_dynobj ();
+				*queueFamilyData++ = queueFamilyObject;
+				hl_dyn_seti (queueFamilyObject, id_index, &hlt_i32, q);
+				hl_dyn_seti (queueFamilyObject, id_flags, &hlt_i32, queueFamilies[q].queueFlags);
+				hl_dyn_seti (queueFamilyObject, id_queueCount, &hlt_i32, queueFamilies[q].queueCount);
+				hl_dyn_seti (queueFamilyObject, id_timestampValidBits, &hlt_i32, queueFamilies[q].timestampValidBits);
+				hl_dyn_seti (queueFamilyObject, id_supportsGraphics, &hlt_bool, (queueFamilies[q].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0);
+				hl_dyn_seti (queueFamilyObject, id_supportsCompute, &hlt_bool, (queueFamilies[q].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0);
+				hl_dyn_seti (queueFamilyObject, id_supportsTransfer, &hlt_bool, (queueFamilies[q].queueFlags & VK_QUEUE_TRANSFER_BIT) != 0);
+				hl_dyn_seti (queueFamilyObject, id_supportsPresent, &hlt_bool, supportsPresent != VK_FALSE);
+
+			}
+
+			vdynamic* deviceObject = (vdynamic*)hl_alloc_dynobj ();
+			*deviceData++ = deviceObject;
+			hl_dyn_setp (deviceObject, id_handle, &hlt_dynobj, HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)physicalDevices[i]));
+			hl_dyn_setp (deviceObject, id_name, &hlt_bytes, hl_copy_bytes ((const vbyte*)properties.deviceName, (int)std::strlen (properties.deviceName) + 1));
+			hl_dyn_seti (deviceObject, id_apiVersion, &hlt_i32, properties.apiVersion);
+			hl_dyn_seti (deviceObject, id_driverVersion, &hlt_i32, properties.driverVersion);
+			hl_dyn_seti (deviceObject, id_vendorID, &hlt_i32, properties.vendorID);
+			hl_dyn_seti (deviceObject, id_deviceID, &hlt_i32, properties.deviceID);
+			hl_dyn_seti (deviceObject, id_deviceType, &hlt_i32, properties.deviceType);
+			hl_dyn_setp (deviceObject, id_queueFamilies, &hlt_array, queueFamilyArray);
+
+		}
+
+		lastVKError.clear ();
+		return devices;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return (hl_varray*)hl_alloc_array (&hlt_dynobj, 0);
+#endif
+
+	}
+
+
+	value lime_vk_get_last_error () {
+
+		return alloc_string (lastVKError.c_str ());
+
+	}
+
+
+	HL_PRIM vbyte* HL_NAME(hl_vk_get_last_error) () {
+
+		return hl_copy_bytes ((const vbyte*)lastVKError.c_str (), (int)lastVKError.size () + 1);
+
+	}
+
+
+#ifdef LIME_VULKAN
+	value lime_vulkan_renderer_create (value window, HxString applicationName) {
+
+		Window* targetWindow = (Window*)val_data (window);
+		VulkanRenderer* renderer = new VulkanRenderer (targetWindow);
+
+		if (!renderer->Create (applicationName.c_str () ? hxs_utf8 (applicationName, nullptr) : 0)) {
+
+			lastVulkanRendererError = renderer->GetLastError ();
+			delete renderer;
+			return alloc_null ();
+
+		}
+
+		lastVulkanRendererError.clear ();
+		return CFFIPointer (renderer);
+
+	}
+
+
+	HL_PRIM HL_CFFIPointer* HL_NAME(hl_vulkan_renderer_create) (HL_CFFIPointer* window, hl_vstring* applicationName) {
+
+		Window* targetWindow = (Window*)window->ptr;
+		VulkanRenderer* renderer = new VulkanRenderer (targetWindow);
+		const char* applicationNameUTF8 = applicationName ? (const char*)hl_to_utf8 ((const uchar*)applicationName->bytes) : 0;
+
+		if (!renderer->Create (applicationNameUTF8)) {
+
+			lastVulkanRendererError = renderer->GetLastError ();
+			delete renderer;
+			return 0;
+
+		}
+
+		lastVulkanRendererError.clear ();
+		return HLCFFIPointer (renderer);
+
+	}
+
+
+	void lime_vulkan_renderer_destroy (value handle) {
+
+		if (val_is_null (handle)) return;
+		VulkanRenderer* renderer = (VulkanRenderer*)val_data (handle);
+		delete renderer;
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vulkan_renderer_destroy) (HL_CFFIPointer* handle) {
+
+		if (!handle || !handle->ptr) return;
+		VulkanRenderer* renderer = (VulkanRenderer*)handle->ptr;
+		handle->ptr = 0;
+		delete renderer;
+
+	}
+
+
+	value lime_vulkan_renderer_get_info (value handle) {
+
+		if (val_is_null (handle)) return alloc_string ("");
+		VulkanRenderer* renderer = (VulkanRenderer*)val_data (handle);
+		return alloc_string (renderer->GetInfo ().c_str ());
+
+	}
+
+
+	HL_PRIM vbyte* HL_NAME(hl_vulkan_renderer_get_info) (HL_CFFIPointer* handle) {
+
+		if (!handle || !handle->ptr) return 0;
+		VulkanRenderer* renderer = (VulkanRenderer*)handle->ptr;
+		return hl_copy_bytes ((const vbyte*)renderer->GetInfo ().c_str (), (int)renderer->GetInfo ().size () + 1);
+
+	}
+
+
+	value lime_vulkan_renderer_get_last_error () {
+
+		return alloc_string (lastVulkanRendererError.c_str ());
+
+	}
+
+
+	HL_PRIM vbyte* HL_NAME(hl_vulkan_renderer_get_last_error) () {
+
+		return hl_copy_bytes ((const vbyte*)lastVulkanRendererError.c_str (), (int)lastVulkanRendererError.size () + 1);
+
+	}
+
+
+	bool lime_vulkan_renderer_set_overlay (value handle, value bytes, int width, int height, int x, int y) {
+
+		if (val_is_null (handle)) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)val_data (handle);
+		Bytes data (bytes);
+		bool result = renderer->SetOverlay (data.b, width, height, x, y);
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_set_overlay) (HL_CFFIPointer* handle, Bytes* bytes, int width, int height, int x, int y) {
+
+		if (!handle || !handle->ptr) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)handle->ptr;
+		bool result = renderer->SetOverlay (bytes ? bytes->b : 0, width, height, x, y);
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	bool lime_vulkan_renderer_clear_overlay (value handle) {
+
+		if (val_is_null (handle)) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)val_data (handle);
+		bool result = renderer->ClearOverlay ();
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_clear_overlay) (HL_CFFIPointer* handle) {
+
+		if (!handle || !handle->ptr) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)handle->ptr;
+		bool result = renderer->ClearOverlay ();
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	bool lime_vulkan_renderer_render (value handle, double red, double green, double blue, double alpha) {
+
+		if (val_is_null (handle)) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)val_data (handle);
+		bool result = renderer->Render (red, green, blue, alpha);
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_render) (HL_CFFIPointer* handle, double red, double green, double blue, double alpha) {
+
+		if (!handle || !handle->ptr) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)handle->ptr;
+		bool result = renderer->Render (red, green, blue, alpha);
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	bool lime_vulkan_renderer_resize (value handle) {
+
+		if (val_is_null (handle)) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)val_data (handle);
+		bool result = renderer->Resize ();
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_resize) (HL_CFFIPointer* handle) {
+
+		if (!handle || !handle->ptr) return false;
+		VulkanRenderer* renderer = (VulkanRenderer*)handle->ptr;
+		bool result = renderer->Resize ();
+		lastVulkanRendererError = renderer->GetLastError ();
+		return result;
+
+	}
+#else
+	value lime_vulkan_renderer_create (value window, HxString applicationName) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+
+	}
+
+
+	HL_PRIM HL_CFFIPointer* HL_NAME(hl_vulkan_renderer_create) (HL_CFFIPointer* window, hl_vstring* applicationName) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return 0;
+
+	}
+
+
+	void lime_vulkan_renderer_destroy (value handle) {}
+
+
+	HL_PRIM void HL_NAME(hl_vulkan_renderer_destroy) (HL_CFFIPointer* handle) {}
+
+
+	value lime_vulkan_renderer_get_info (value handle) {
+
+		return alloc_string ("");
+
+	}
+
+
+	HL_PRIM vbyte* HL_NAME(hl_vulkan_renderer_get_info) (HL_CFFIPointer* handle) {
+
+		return hl_copy_bytes ((const vbyte*)"", 1);
+
+	}
+
+
+	value lime_vulkan_renderer_get_last_error () {
+
+		return alloc_string (lastVulkanRendererError.c_str ());
+
+	}
+
+
+	HL_PRIM vbyte* HL_NAME(hl_vulkan_renderer_get_last_error) () {
+
+		return hl_copy_bytes ((const vbyte*)lastVulkanRendererError.c_str (), (int)lastVulkanRendererError.size () + 1);
+
+	}
+
+
+	bool lime_vulkan_renderer_set_overlay (value handle, value bytes, int width, int height, int x, int y) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_set_overlay) (HL_CFFIPointer* handle, Bytes* bytes, int width, int height, int x, int y) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	bool lime_vulkan_renderer_clear_overlay (value handle) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_clear_overlay) (HL_CFFIPointer* handle) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	bool lime_vulkan_renderer_render (value handle, double red, double green, double blue, double alpha) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_render) (HL_CFFIPointer* handle, double red, double green, double blue, double alpha) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	bool lime_vulkan_renderer_resize (value handle) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vulkan_renderer_resize) (HL_CFFIPointer* handle) {
+
+		lastVulkanRendererError = "Lime was built without lime-vulkan support";
+		return false;
+
+	}
+#endif
+
+
 	int lime_window_get_display (value window) {
 
 		Window* targetWindow = (Window*)val_data (window);
@@ -4297,6 +5356,7 @@ namespace lime {
 	DEFINE_PRIME1v (lime_window_focus);
 	DEFINE_PRIME1 (lime_window_get_context);
 	DEFINE_PRIME1 (lime_window_get_context_type);
+	DEFINE_PRIME3 (lime_window_create_vulkan_surface);
 	DEFINE_PRIME1 (lime_window_get_display);
 	DEFINE_PRIME1 (lime_window_get_display_mode);
 	DEFINE_PRIME1 (lime_window_get_height);
@@ -4304,6 +5364,22 @@ namespace lime {
 	DEFINE_PRIME1 (lime_window_get_mouse_lock);
 	DEFINE_PRIME1 (lime_window_get_scale);
 	DEFINE_PRIME1 (lime_window_get_text_input_enabled);
+	DEFINE_PRIME1 (lime_window_get_vulkan_drawable_size);
+	DEFINE_PRIME1 (lime_window_get_vulkan_instance_extensions);
+	DEFINE_PRIME1 (lime_window_get_vulkan_instance_proc_addr);
+	DEFINE_PRIME2 (lime_vk_create_instance);
+	DEFINE_PRIME3v (lime_vk_destroy_instance);
+	DEFINE_PRIME5v (lime_vk_destroy_surface);
+	DEFINE_PRIME5 (lime_vk_get_physical_devices);
+	DEFINE_PRIME0 (lime_vk_get_last_error);
+	DEFINE_PRIME2 (lime_vulkan_renderer_create);
+	DEFINE_PRIME1v (lime_vulkan_renderer_destroy);
+	DEFINE_PRIME1 (lime_vulkan_renderer_get_info);
+	DEFINE_PRIME0 (lime_vulkan_renderer_get_last_error);
+	DEFINE_PRIME6 (lime_vulkan_renderer_set_overlay);
+	DEFINE_PRIME1 (lime_vulkan_renderer_clear_overlay);
+	DEFINE_PRIME5 (lime_vulkan_renderer_render);
+	DEFINE_PRIME1 (lime_vulkan_renderer_resize);
 	DEFINE_PRIME1 (lime_window_get_width);
 	DEFINE_PRIME1 (lime_window_get_x);
 	DEFINE_PRIME1 (lime_window_get_y);
@@ -4496,6 +5572,7 @@ namespace lime {
 	DEFINE_HL_PRIM (_VOID, hl_window_focus, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_F64, hl_window_get_context, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_BYTES, hl_window_get_context_type, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_DYN, hl_window_create_vulkan_surface, _TCFFIPOINTER _I32 _I32);
 	DEFINE_HL_PRIM (_I32, hl_window_get_display, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_VOID, hl_window_get_display_mode, _TCFFIPOINTER _TDISPLAYMODE);
 	DEFINE_HL_PRIM (_I32, hl_window_get_height, _TCFFIPOINTER);
@@ -4503,6 +5580,22 @@ namespace lime {
 	DEFINE_HL_PRIM (_BOOL, hl_window_get_mouse_lock, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_F64, hl_window_get_scale, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_BOOL, hl_window_get_text_input_enabled, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_DYN, hl_window_get_vulkan_drawable_size, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_ARR, hl_window_get_vulkan_instance_extensions, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_DYN, hl_window_get_vulkan_instance_proc_addr, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_DYN, hl_vk_create_instance, _TCFFIPOINTER _STRING);
+	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_instance, _TCFFIPOINTER _I32 _I32);
+	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_surface, _TCFFIPOINTER _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_ARR, hl_vk_get_physical_devices, _TCFFIPOINTER _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BYTES, hl_vk_get_last_error, _NO_ARG);
+	DEFINE_HL_PRIM (_TCFFIPOINTER, hl_vulkan_renderer_create, _TCFFIPOINTER _STRING);
+	DEFINE_HL_PRIM (_VOID, hl_vulkan_renderer_destroy, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_BYTES, hl_vulkan_renderer_get_info, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_BYTES, hl_vulkan_renderer_get_last_error, _NO_ARG);
+	DEFINE_HL_PRIM (_BOOL, hl_vulkan_renderer_set_overlay, _TCFFIPOINTER _TBYTES _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vulkan_renderer_clear_overlay, _TCFFIPOINTER);
+	DEFINE_HL_PRIM (_BOOL, hl_vulkan_renderer_render, _TCFFIPOINTER _F64 _F64 _F64 _F64);
+	DEFINE_HL_PRIM (_BOOL, hl_vulkan_renderer_resize, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_I32, hl_window_get_width, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_I32, hl_window_get_x, _TCFFIPOINTER);
 	DEFINE_HL_PRIM (_I32, hl_window_get_y, _TCFFIPOINTER);
