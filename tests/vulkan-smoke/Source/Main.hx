@@ -114,6 +114,114 @@ class Main extends Application
 			return;
 		}
 
+		var queueFamily = device.getQueueFamily(true, true);
+		var logicalDevice = device.createDevice(queueFamily);
+		if (logicalDevice == null || !logicalDevice.isValid() || logicalDevice.graphicsQueue == null || !logicalDevice.graphicsQueue.isValid())
+		{
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to create Vulkan logical device: " + VK.getLastError());
+			return;
+		}
+
+		if (!logicalDevice.graphicsQueue.waitIdle())
+		{
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to wait for Vulkan graphics queue: " + VK.getLastError());
+			return;
+		}
+
+		var semaphore = logicalDevice.createSemaphore();
+		if (semaphore == null || !semaphore.isValid())
+		{
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to create Vulkan semaphore: " + VK.getLastError());
+			return;
+		}
+
+		var commandPool = logicalDevice.createCommandPool(queueFamily);
+		if (commandPool == null || !commandPool.isValid())
+		{
+			semaphore.dispose();
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to create Vulkan command pool: " + VK.getLastError());
+			return;
+		}
+
+		var commandBuffer = commandPool.allocateCommandBuffer();
+		if (commandBuffer == null || !commandBuffer.isValid())
+		{
+			commandPool.dispose();
+			semaphore.dispose();
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to allocate Vulkan command buffer: " + VK.getLastError());
+			return;
+		}
+
+		if (!commandBuffer.begin(VK.COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) || !commandBuffer.end())
+		{
+			commandBuffer.dispose();
+			commandPool.dispose();
+			semaphore.dispose();
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to record Vulkan command buffer: " + VK.getLastError());
+			return;
+		}
+
+		var fence = logicalDevice.createFence();
+		if (fence == null || !fence.isValid())
+		{
+			commandBuffer.dispose();
+			commandPool.dispose();
+			semaphore.dispose();
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to create Vulkan fence: " + VK.getLastError());
+			return;
+		}
+
+		if (!logicalDevice.graphicsQueue.submit(commandBuffer, fence) || !fence.waitForever() || !fence.reset())
+		{
+			fence.dispose();
+			commandBuffer.dispose();
+			commandPool.dispose();
+			semaphore.dispose();
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to submit Vulkan command buffer: " + VK.getLastError());
+			return;
+		}
+
+		if (!logicalDevice.waitIdle())
+		{
+			fence.dispose();
+			commandBuffer.dispose();
+			commandPool.dispose();
+			semaphore.dispose();
+			logicalDevice.dispose();
+			surface.dispose();
+			instance.dispose();
+			fail("Failed to wait for Vulkan logical device: " + VK.getLastError());
+			return;
+		}
+
+		fence.dispose();
+		commandBuffer.dispose();
+		commandPool.dispose();
+		semaphore.dispose();
+		logicalDevice.dispose();
 		surface.dispose();
 		instance.dispose();
 	}

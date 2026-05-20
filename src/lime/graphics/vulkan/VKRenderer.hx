@@ -15,8 +15,10 @@ import lime._internal.backend.native.NativeCFFI;
 @:access(lime.graphics.VulkanRenderContext)
 @:access(lime._internal.backend.native.NativeCFFI)
 /**
-	A minimal managed Vulkan swapchain renderer exposed by Lime for validation
-	and sample work. This is intentionally narrower than Lime's GL API surface.
+	Lime's managed Vulkan validation renderer.
+
+	This is useful for smoke tests and samples, but application renderers should
+	build on `VK` handles such as `VKInstance`, `VKDevice`, and `VKQueue`.
 **/
 class VKRenderer
 {

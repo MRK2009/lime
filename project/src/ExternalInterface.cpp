@@ -241,6 +241,259 @@ namespace lime {
 		return true;
 
 	}
+
+
+	static std::vector<std::string> GetVulkanDeviceExtensions (value extensions) {
+
+		std::vector<std::string> deviceExtensions;
+
+		if (val_is_null (extensions)) {
+
+			deviceExtensions.push_back (VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+			return deviceExtensions;
+
+		}
+
+		int length = val_array_size (extensions);
+		for (int i = 0; i < length; ++i) {
+
+			value extension = val_array_i (extensions, i);
+			if (!val_is_null (extension)) {
+
+				deviceExtensions.push_back (val_string (extension));
+
+			}
+
+		}
+
+		return deviceExtensions;
+
+	}
+
+
+	static std::vector<std::string> GetHLVulkanDeviceExtensions (hl_varray* extensions) {
+
+		std::vector<std::string> deviceExtensions;
+
+		if (!extensions) {
+
+			deviceExtensions.push_back (VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+			return deviceExtensions;
+
+		}
+
+		int length = extensions->size;
+		hl_vstring** extensionData = hl_aptr (extensions, hl_vstring*);
+
+		for (int i = 0; i < length; ++i) {
+
+			hl_vstring* extension = *extensionData++;
+			if (extension) {
+
+				deviceExtensions.push_back (hl_to_utf8 ((const uchar*)extension->bytes));
+
+			}
+
+		}
+
+		return deviceExtensions;
+
+	}
+
+
+	static PFN_vkVoidFunction GetManagedVulkanDeviceProc (Window* targetWindow, VkInstance instance, VkDevice device, const char* name) {
+
+		if (!targetWindow || !instance || !device) {
+
+			lastVKError = "Missing Vulkan window, instance, or device";
+			return 0;
+
+		}
+
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr ();
+		if (!vkGetInstanceProcAddr) {
+
+			lastVKError = "SDL did not expose vkGetInstanceProcAddr";
+			return 0;
+
+		}
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) {
+
+			lastVKError = "Missing Vulkan device proc address function";
+			return 0;
+
+		}
+
+		PFN_vkVoidFunction proc = vkGetDeviceProcAddr (device, name);
+		if (!proc) {
+
+			lastVKError = std::string ("Missing Vulkan device function: ") + name;
+			return 0;
+
+		}
+
+		return proc;
+
+	}
+
+
+	static bool CreateManagedVulkanDevice (Window* targetWindow, VkInstance instance, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
+		const std::vector<std::string>& requestedExtensions, VkDevice* outDevice, VkQueue* outQueue) {
+
+		if (!targetWindow || !instance || !physicalDevice || !outDevice || !outQueue) {
+
+			lastVKError = "Missing Vulkan instance, physical device, or output device";
+			return false;
+
+		}
+
+		*outDevice = VK_NULL_HANDLE;
+		*outQueue = VK_NULL_HANDLE;
+
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr ();
+		if (!vkGetInstanceProcAddr) {
+
+			lastVKError = "SDL did not expose vkGetInstanceProcAddr";
+			return false;
+
+		}
+
+		PFN_vkCreateDevice vkCreateDevice = (PFN_vkCreateDevice)vkGetInstanceProcAddr (instance, "vkCreateDevice");
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties =
+			(PFN_vkEnumerateDeviceExtensionProperties)vkGetInstanceProcAddr (instance, "vkEnumerateDeviceExtensionProperties");
+		PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
+			(PFN_vkGetPhysicalDeviceQueueFamilyProperties)vkGetInstanceProcAddr (instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+
+		if (!vkCreateDevice || !vkGetDeviceProcAddr || !vkEnumerateDeviceExtensionProperties || !vkGetPhysicalDeviceQueueFamilyProperties) {
+
+			lastVKError = "Missing required Vulkan device creation functions";
+			return false;
+
+		}
+
+		uint32_t queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties (physicalDevice, &queueFamilyCount, 0);
+		if (queueFamilyIndex >= queueFamilyCount) {
+
+			lastVKError = "Invalid Vulkan queue family index";
+			return false;
+
+		}
+
+		float queuePriority = 1.0f;
+		VkDeviceQueueCreateInfo queueCreateInfo;
+		memset (&queueCreateInfo, 0, sizeof (queueCreateInfo));
+		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
+		queueCreateInfo.queueCount = 1;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+
+		std::vector<const char*> deviceExtensions;
+		for (size_t i = 0; i < requestedExtensions.size (); ++i) {
+
+			deviceExtensions.push_back (requestedExtensions[i].c_str ());
+
+		}
+
+		if (!requestedExtensions.empty ()) {
+
+			uint32_t extensionCount = 0;
+			VkResult extensionResult = vkEnumerateDeviceExtensionProperties (physicalDevice, 0, &extensionCount, 0);
+			if (extensionResult != VK_SUCCESS) {
+
+				lastVKError = "Could not enumerate Vulkan device extensions";
+				return false;
+
+			}
+
+			std::vector<VkExtensionProperties> availableExtensions (extensionCount);
+			if (extensionCount > 0) {
+
+				extensionResult = vkEnumerateDeviceExtensionProperties (physicalDevice, 0, &extensionCount, availableExtensions.data ());
+				if (extensionResult != VK_SUCCESS) {
+
+					lastVKError = "Could not enumerate Vulkan device extensions";
+					return false;
+
+				}
+
+			}
+
+			for (size_t i = 0; i < requestedExtensions.size (); ++i) {
+
+				bool extensionSupported = false;
+
+				for (size_t e = 0; e < availableExtensions.size (); ++e) {
+
+					if (strcmp (availableExtensions[e].extensionName, requestedExtensions[i].c_str ()) == 0) {
+
+						extensionSupported = true;
+						break;
+
+					}
+
+				}
+
+				if (!extensionSupported) {
+
+					lastVKError = std::string ("Vulkan physical device does not support ") + requestedExtensions[i];
+					return false;
+
+				}
+
+			}
+
+		}
+
+		VkPhysicalDeviceFeatures deviceFeatures;
+		memset (&deviceFeatures, 0, sizeof (deviceFeatures));
+
+		VkDeviceCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		createInfo.queueCreateInfoCount = 1;
+		createInfo.pQueueCreateInfos = &queueCreateInfo;
+		createInfo.pEnabledFeatures = &deviceFeatures;
+		createInfo.enabledExtensionCount = (uint32_t)deviceExtensions.size ();
+		createInfo.ppEnabledExtensionNames = deviceExtensions.empty () ? 0 : deviceExtensions.data ();
+
+		VkResult result = vkCreateDevice (physicalDevice, &createInfo, 0, outDevice);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateDevice failed";
+			return false;
+
+		}
+
+		PFN_vkGetDeviceQueue vkGetDeviceQueue = (PFN_vkGetDeviceQueue)vkGetDeviceProcAddr (*outDevice, "vkGetDeviceQueue");
+		if (!vkGetDeviceQueue) {
+
+			PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (*outDevice, "vkDestroyDevice");
+			if (vkDestroyDevice) vkDestroyDevice (*outDevice, 0);
+			*outDevice = VK_NULL_HANDLE;
+			lastVKError = "Missing Vulkan device queue function";
+			return false;
+
+		}
+
+		vkGetDeviceQueue (*outDevice, queueFamilyIndex, 0, outQueue);
+		if (!*outQueue) {
+
+			PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (*outDevice, "vkDestroyDevice");
+			if (vkDestroyDevice) vkDestroyDevice (*outDevice, 0);
+			*outDevice = VK_NULL_HANDLE;
+			lastVKError = "Failed to get Vulkan device queue";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+
+	}
 #endif
 
 
@@ -4284,6 +4537,1188 @@ namespace lime {
 	}
 
 
+	value lime_vk_create_device (value window, int instanceHigh, int instanceLow, int physicalDeviceHigh, int physicalDeviceLow, int queueFamilyIndex,
+		value extensions) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkPhysicalDevice physicalDevice = (VkPhysicalDevice)(uintptr_t)CombineVulkanHandle (physicalDeviceHigh, physicalDeviceLow);
+		std::vector<std::string> deviceExtensions = GetVulkanDeviceExtensions (extensions);
+		VkDevice device = VK_NULL_HANDLE;
+		VkQueue queue = VK_NULL_HANDLE;
+
+		if (!CreateManagedVulkanDevice (targetWindow, instance, physicalDevice, queueFamilyIndex, deviceExtensions, &device, &queue)) {
+
+			return alloc_null ();
+
+		}
+
+		value result = alloc_empty_object ();
+		alloc_field (result, val_id ("handle"), CreateVulkanHandleValue ((uint64_t)(uintptr_t)device));
+		alloc_field (result, val_id ("queue"), CreateVulkanHandleValue ((uint64_t)(uintptr_t)queue));
+		alloc_field (result, val_id ("queueFamilyIndex"), alloc_int (queueFamilyIndex));
+		return result;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+#endif
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_vk_create_device) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int physicalDeviceHigh,
+		int physicalDeviceLow, int queueFamilyIndex, hl_varray* extensions) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkPhysicalDevice physicalDevice = (VkPhysicalDevice)(uintptr_t)CombineVulkanHandle (physicalDeviceHigh, physicalDeviceLow);
+		std::vector<std::string> deviceExtensions = GetHLVulkanDeviceExtensions (extensions);
+		VkDevice device = VK_NULL_HANDLE;
+		VkQueue queue = VK_NULL_HANDLE;
+
+		if (!CreateManagedVulkanDevice (targetWindow, instance, physicalDevice, queueFamilyIndex, deviceExtensions, &device, &queue)) {
+
+			return 0;
+
+		}
+
+		const int id_handle = hl_hash_utf8 ("handle");
+		const int id_queue = hl_hash_utf8 ("queue");
+		const int id_queueFamilyIndex = hl_hash_utf8 ("queueFamilyIndex");
+		vdynamic* result = (vdynamic*)hl_alloc_dynobj ();
+		hl_dyn_setp (result, id_handle, &hlt_dynobj, HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)device));
+		hl_dyn_setp (result, id_queue, &hlt_dynobj, HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)queue));
+		hl_dyn_seti (result, id_queueFamilyIndex, &hlt_i32, queueFamilyIndex);
+		return result;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return 0;
+#endif
+
+	}
+
+
+	void lime_vk_destroy_device (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+
+#ifdef LIME_VULKAN
+		if (deviceHigh == 0 && deviceLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr) return;
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) return;
+
+		PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (device, "vkDestroyDevice");
+		if (vkDestroyDevice) {
+
+			vkDestroyDevice (device, 0);
+
+		}
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_destroy_device) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+
+#ifdef LIME_VULKAN
+		if (deviceHigh == 0 && deviceLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr) return;
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) return;
+
+		PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (device, "vkDestroyDevice");
+		if (vkDestroyDevice) {
+
+			vkDestroyDevice (device, 0);
+
+		}
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	bool lime_vk_device_wait_idle (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr || !instance || !device) {
+
+			lastVKError = "Missing Vulkan window, instance, or device";
+			return false;
+
+		}
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) {
+
+			lastVKError = "Missing Vulkan device proc address function";
+			return false;
+
+		}
+
+		PFN_vkDeviceWaitIdle vkDeviceWaitIdle = (PFN_vkDeviceWaitIdle)vkGetDeviceProcAddr (device, "vkDeviceWaitIdle");
+		if (!vkDeviceWaitIdle) {
+
+			lastVKError = "Missing Vulkan device wait idle function";
+			return false;
+
+		}
+
+		VkResult result = vkDeviceWaitIdle (device);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkDeviceWaitIdle failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_device_wait_idle) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr || !instance || !device) {
+
+			lastVKError = "Missing Vulkan window, instance, or device";
+			return false;
+
+		}
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) {
+
+			lastVKError = "Missing Vulkan device proc address function";
+			return false;
+
+		}
+
+		PFN_vkDeviceWaitIdle vkDeviceWaitIdle = (PFN_vkDeviceWaitIdle)vkGetDeviceProcAddr (device, "vkDeviceWaitIdle");
+		if (!vkDeviceWaitIdle) {
+
+			lastVKError = "Missing Vulkan device wait idle function";
+			return false;
+
+		}
+
+		VkResult result = vkDeviceWaitIdle (device);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkDeviceWaitIdle failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_queue_wait_idle (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int queueHigh, int queueLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkQueue queue = (VkQueue)(uintptr_t)CombineVulkanHandle (queueHigh, queueLow);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr || !instance || !device || !queue) {
+
+			lastVKError = "Missing Vulkan window, instance, device, or queue";
+			return false;
+
+		}
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) {
+
+			lastVKError = "Missing Vulkan device proc address function";
+			return false;
+
+		}
+
+		PFN_vkQueueWaitIdle vkQueueWaitIdle = (PFN_vkQueueWaitIdle)vkGetDeviceProcAddr (device, "vkQueueWaitIdle");
+		if (!vkQueueWaitIdle) {
+
+			lastVKError = "Missing Vulkan queue wait idle function";
+			return false;
+
+		}
+
+		VkResult result = vkQueueWaitIdle (queue);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkQueueWaitIdle failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_queue_wait_idle) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int queueHigh,
+		int queueLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkQueue queue = (VkQueue)(uintptr_t)CombineVulkanHandle (queueHigh, queueLow);
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = targetWindow ? (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr () : 0;
+		if (!vkGetInstanceProcAddr || !instance || !device || !queue) {
+
+			lastVKError = "Missing Vulkan window, instance, device, or queue";
+			return false;
+
+		}
+
+		PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)vkGetInstanceProcAddr (instance, "vkGetDeviceProcAddr");
+		if (!vkGetDeviceProcAddr) {
+
+			lastVKError = "Missing Vulkan device proc address function";
+			return false;
+
+		}
+
+		PFN_vkQueueWaitIdle vkQueueWaitIdle = (PFN_vkQueueWaitIdle)vkGetDeviceProcAddr (device, "vkQueueWaitIdle");
+		if (!vkQueueWaitIdle) {
+
+			lastVKError = "Missing Vulkan queue wait idle function";
+			return false;
+
+		}
+
+		VkResult result = vkQueueWaitIdle (queue);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkQueueWaitIdle failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	value lime_vk_create_command_pool (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int queueFamilyIndex, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCreateCommandPool vkCreateCommandPool = (PFN_vkCreateCommandPool)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkCreateCommandPool");
+		if (!vkCreateCommandPool) return alloc_null ();
+
+		VkCommandPoolCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		createInfo.flags = flags;
+		createInfo.queueFamilyIndex = queueFamilyIndex;
+
+		VkCommandPool commandPool = VK_NULL_HANDLE;
+		VkResult result = vkCreateCommandPool (device, &createInfo, 0, &commandPool);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateCommandPool failed";
+			return alloc_null ();
+
+		}
+
+		lastVKError.clear ();
+		return CreateVulkanHandleValue ((uint64_t)(uintptr_t)commandPool);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+#endif
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_vk_create_command_pool) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int queueFamilyIndex, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCreateCommandPool vkCreateCommandPool = (PFN_vkCreateCommandPool)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkCreateCommandPool");
+		if (!vkCreateCommandPool) return 0;
+
+		VkCommandPoolCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		createInfo.flags = flags;
+		createInfo.queueFamilyIndex = queueFamilyIndex;
+
+		VkCommandPool commandPool = VK_NULL_HANDLE;
+		VkResult result = vkCreateCommandPool (device, &createInfo, 0, &commandPool);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateCommandPool failed";
+			return 0;
+
+		}
+
+		lastVKError.clear ();
+		return HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)commandPool);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return 0;
+#endif
+
+	}
+
+
+	void lime_vk_destroy_command_pool (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandPoolHigh,
+		int commandPoolLow) {
+
+#ifdef LIME_VULKAN
+		if (commandPoolHigh == 0 && commandPoolLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		PFN_vkDestroyCommandPool vkDestroyCommandPool = (PFN_vkDestroyCommandPool)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkDestroyCommandPool");
+		if (vkDestroyCommandPool) vkDestroyCommandPool (device, commandPool, 0);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_destroy_command_pool) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandPoolHigh, int commandPoolLow) {
+
+#ifdef LIME_VULKAN
+		if (commandPoolHigh == 0 && commandPoolLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		PFN_vkDestroyCommandPool vkDestroyCommandPool = (PFN_vkDestroyCommandPool)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkDestroyCommandPool");
+		if (vkDestroyCommandPool) vkDestroyCommandPool (device, commandPool, 0);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	bool lime_vk_reset_command_pool (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandPoolHigh,
+		int commandPoolLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		PFN_vkResetCommandPool vkResetCommandPool = (PFN_vkResetCommandPool)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkResetCommandPool");
+		if (!vkResetCommandPool) return false;
+
+		VkResult result = vkResetCommandPool (device, commandPool, flags);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetCommandPool failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_reset_command_pool) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandPoolHigh, int commandPoolLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		PFN_vkResetCommandPool vkResetCommandPool = (PFN_vkResetCommandPool)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkResetCommandPool");
+		if (!vkResetCommandPool) return false;
+
+		VkResult result = vkResetCommandPool (device, commandPool, flags);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetCommandPool failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	value lime_vk_allocate_command_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandPoolHigh,
+		int commandPoolLow, int level) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers = (PFN_vkAllocateCommandBuffers)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkAllocateCommandBuffers");
+		if (!vkAllocateCommandBuffers) return alloc_null ();
+
+		VkCommandBufferAllocateInfo allocateInfo;
+		memset (&allocateInfo, 0, sizeof (allocateInfo));
+		allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocateInfo.commandPool = commandPool;
+		allocateInfo.level = (VkCommandBufferLevel)level;
+		allocateInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+		VkResult result = vkAllocateCommandBuffers (device, &allocateInfo, &commandBuffer);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkAllocateCommandBuffers failed";
+			return alloc_null ();
+
+		}
+
+		lastVKError.clear ();
+		return CreateVulkanHandleValue ((uint64_t)(uintptr_t)commandBuffer);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+#endif
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_vk_allocate_command_buffer) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandPoolHigh, int commandPoolLow, int level) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers = (PFN_vkAllocateCommandBuffers)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkAllocateCommandBuffers");
+		if (!vkAllocateCommandBuffers) return 0;
+
+		VkCommandBufferAllocateInfo allocateInfo;
+		memset (&allocateInfo, 0, sizeof (allocateInfo));
+		allocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocateInfo.commandPool = commandPool;
+		allocateInfo.level = (VkCommandBufferLevel)level;
+		allocateInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+		VkResult result = vkAllocateCommandBuffers (device, &allocateInfo, &commandBuffer);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkAllocateCommandBuffers failed";
+			return 0;
+
+		}
+
+		lastVKError.clear ();
+		return HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)commandBuffer);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return 0;
+#endif
+
+	}
+
+
+	void lime_vk_free_command_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandPoolHigh,
+		int commandPoolLow, int commandBufferHigh, int commandBufferLow) {
+
+#ifdef LIME_VULKAN
+		if (commandBufferHigh == 0 && commandBufferLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkFreeCommandBuffers vkFreeCommandBuffers = (PFN_vkFreeCommandBuffers)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkFreeCommandBuffers");
+		if (vkFreeCommandBuffers) vkFreeCommandBuffers (device, commandPool, 1, &commandBuffer);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_free_command_buffer) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandPoolHigh, int commandPoolLow, int commandBufferHigh, int commandBufferLow) {
+
+#ifdef LIME_VULKAN
+		if (commandBufferHigh == 0 && commandBufferLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandPool commandPool = (VkCommandPool)(uintptr_t)CombineVulkanHandle (commandPoolHigh, commandPoolLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkFreeCommandBuffers vkFreeCommandBuffers = (PFN_vkFreeCommandBuffers)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkFreeCommandBuffers");
+		if (vkFreeCommandBuffers) vkFreeCommandBuffers (device, commandPool, 1, &commandBuffer);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	bool lime_vk_begin_command_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkBeginCommandBuffer vkBeginCommandBuffer = (PFN_vkBeginCommandBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkBeginCommandBuffer");
+		if (!vkBeginCommandBuffer) return false;
+
+		VkCommandBufferBeginInfo beginInfo;
+		memset (&beginInfo, 0, sizeof (beginInfo));
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = flags;
+
+		VkResult result = vkBeginCommandBuffer (commandBuffer, &beginInfo);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkBeginCommandBuffer failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_begin_command_buffer) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkBeginCommandBuffer vkBeginCommandBuffer = (PFN_vkBeginCommandBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkBeginCommandBuffer");
+		if (!vkBeginCommandBuffer) return false;
+
+		VkCommandBufferBeginInfo beginInfo;
+		memset (&beginInfo, 0, sizeof (beginInfo));
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = flags;
+
+		VkResult result = vkBeginCommandBuffer (commandBuffer, &beginInfo);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkBeginCommandBuffer failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_end_command_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkEndCommandBuffer vkEndCommandBuffer = (PFN_vkEndCommandBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkEndCommandBuffer");
+		if (!vkEndCommandBuffer) return false;
+
+		VkResult result = vkEndCommandBuffer (commandBuffer);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkEndCommandBuffer failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_end_command_buffer) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkEndCommandBuffer vkEndCommandBuffer = (PFN_vkEndCommandBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkEndCommandBuffer");
+		if (!vkEndCommandBuffer) return false;
+
+		VkResult result = vkEndCommandBuffer (commandBuffer);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkEndCommandBuffer failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_reset_command_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkResetCommandBuffer vkResetCommandBuffer = (PFN_vkResetCommandBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkResetCommandBuffer");
+		if (!vkResetCommandBuffer) return false;
+
+		VkResult result = vkResetCommandBuffer (commandBuffer, flags);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetCommandBuffer failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_reset_command_buffer) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		PFN_vkResetCommandBuffer vkResetCommandBuffer = (PFN_vkResetCommandBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkResetCommandBuffer");
+		if (!vkResetCommandBuffer) return false;
+
+		VkResult result = vkResetCommandBuffer (commandBuffer, flags);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetCommandBuffer failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	value lime_vk_create_semaphore (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCreateSemaphore vkCreateSemaphore = (PFN_vkCreateSemaphore)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkCreateSemaphore");
+		if (!vkCreateSemaphore) return alloc_null ();
+
+		VkSemaphoreCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkSemaphore semaphore = VK_NULL_HANDLE;
+		VkResult result = vkCreateSemaphore (device, &createInfo, 0, &semaphore);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateSemaphore failed";
+			return alloc_null ();
+
+		}
+
+		lastVKError.clear ();
+		return CreateVulkanHandleValue ((uint64_t)(uintptr_t)semaphore);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+#endif
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_vk_create_semaphore) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCreateSemaphore vkCreateSemaphore = (PFN_vkCreateSemaphore)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkCreateSemaphore");
+		if (!vkCreateSemaphore) return 0;
+
+		VkSemaphoreCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkSemaphore semaphore = VK_NULL_HANDLE;
+		VkResult result = vkCreateSemaphore (device, &createInfo, 0, &semaphore);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateSemaphore failed";
+			return 0;
+
+		}
+
+		lastVKError.clear ();
+		return HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)semaphore);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return 0;
+#endif
+
+	}
+
+
+	void lime_vk_destroy_semaphore (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int semaphoreHigh,
+		int semaphoreLow) {
+
+#ifdef LIME_VULKAN
+		if (semaphoreHigh == 0 && semaphoreLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkSemaphore semaphore = (VkSemaphore)(uintptr_t)CombineVulkanHandle (semaphoreHigh, semaphoreLow);
+		PFN_vkDestroySemaphore vkDestroySemaphore = (PFN_vkDestroySemaphore)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkDestroySemaphore");
+		if (vkDestroySemaphore) vkDestroySemaphore (device, semaphore, 0);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_destroy_semaphore) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int semaphoreHigh, int semaphoreLow) {
+
+#ifdef LIME_VULKAN
+		if (semaphoreHigh == 0 && semaphoreLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkSemaphore semaphore = (VkSemaphore)(uintptr_t)CombineVulkanHandle (semaphoreHigh, semaphoreLow);
+		PFN_vkDestroySemaphore vkDestroySemaphore = (PFN_vkDestroySemaphore)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkDestroySemaphore");
+		if (vkDestroySemaphore) vkDestroySemaphore (device, semaphore, 0);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	value lime_vk_create_fence (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCreateFence vkCreateFence = (PFN_vkCreateFence)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCreateFence");
+		if (!vkCreateFence) return alloc_null ();
+
+		VkFenceCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		createInfo.flags = flags;
+
+		VkFence fence = VK_NULL_HANDLE;
+		VkResult result = vkCreateFence (device, &createInfo, 0, &fence);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateFence failed";
+			return alloc_null ();
+
+		}
+
+		lastVKError.clear ();
+		return CreateVulkanHandleValue ((uint64_t)(uintptr_t)fence);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return alloc_null ();
+#endif
+
+	}
+
+
+	HL_PRIM vdynamic* HL_NAME(hl_vk_create_fence) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCreateFence vkCreateFence = (PFN_vkCreateFence)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCreateFence");
+		if (!vkCreateFence) return 0;
+
+		VkFenceCreateInfo createInfo;
+		memset (&createInfo, 0, sizeof (createInfo));
+		createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		createInfo.flags = flags;
+
+		VkFence fence = VK_NULL_HANDLE;
+		VkResult result = vkCreateFence (device, &createInfo, 0, &fence);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkCreateFence failed";
+			return 0;
+
+		}
+
+		lastVKError.clear ();
+		return HLCreateVulkanHandleValue ((uint64_t)(uintptr_t)fence);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return 0;
+#endif
+
+	}
+
+
+	void lime_vk_destroy_fence (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int fenceHigh, int fenceLow) {
+
+#ifdef LIME_VULKAN
+		if (fenceHigh == 0 && fenceLow == 0) return;
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		PFN_vkDestroyFence vkDestroyFence = (PFN_vkDestroyFence)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkDestroyFence");
+		if (vkDestroyFence) vkDestroyFence (device, fence, 0);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_destroy_fence) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int fenceHigh,
+		int fenceLow) {
+
+#ifdef LIME_VULKAN
+		if (fenceHigh == 0 && fenceLow == 0) return;
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		PFN_vkDestroyFence vkDestroyFence = (PFN_vkDestroyFence)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkDestroyFence");
+		if (vkDestroyFence) vkDestroyFence (device, fence, 0);
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	bool lime_vk_wait_for_fence (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int fenceHigh, int fenceLow,
+		int timeoutHigh, int timeoutLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		uint64_t timeout = CombineVulkanHandle (timeoutHigh, timeoutLow);
+		PFN_vkWaitForFences vkWaitForFences = (PFN_vkWaitForFences)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkWaitForFences");
+		if (!vkWaitForFences) return false;
+
+		VkResult result = vkWaitForFences (device, 1, &fence, VK_TRUE, timeout);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkWaitForFences failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_wait_for_fence) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int fenceHigh,
+		int fenceLow, int timeoutHigh, int timeoutLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		uint64_t timeout = CombineVulkanHandle (timeoutHigh, timeoutLow);
+		PFN_vkWaitForFences vkWaitForFences = (PFN_vkWaitForFences)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkWaitForFences");
+		if (!vkWaitForFences) return false;
+
+		VkResult result = vkWaitForFences (device, 1, &fence, VK_TRUE, timeout);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkWaitForFences failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_reset_fence (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int fenceHigh, int fenceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		PFN_vkResetFences vkResetFences = (PFN_vkResetFences)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkResetFences");
+		if (!vkResetFences) return false;
+
+		VkResult result = vkResetFences (device, 1, &fence);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetFences failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_reset_fence) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int fenceHigh,
+		int fenceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		PFN_vkResetFences vkResetFences = (PFN_vkResetFences)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkResetFences");
+		if (!vkResetFences) return false;
+
+		VkResult result = vkResetFences (device, 1, &fence);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetFences failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_queue_submit (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int queueHigh, int queueLow,
+		int commandBufferHigh, int commandBufferLow, int fenceHigh, int fenceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkQueue queue = (VkQueue)(uintptr_t)CombineVulkanHandle (queueHigh, queueLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		PFN_vkQueueSubmit vkQueueSubmit = (PFN_vkQueueSubmit)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkQueueSubmit");
+		if (!vkQueueSubmit) return false;
+
+		VkSubmitInfo submitInfo;
+		memset (&submitInfo, 0, sizeof (submitInfo));
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+
+		VkResult result = vkQueueSubmit (queue, 1, &submitInfo, fence);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkQueueSubmit failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_queue_submit) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int queueHigh,
+		int queueLow, int commandBufferHigh, int commandBufferLow, int fenceHigh, int fenceLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkQueue queue = (VkQueue)(uintptr_t)CombineVulkanHandle (queueHigh, queueLow);
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkFence fence = (VkFence)(uintptr_t)CombineVulkanHandle (fenceHigh, fenceLow);
+		PFN_vkQueueSubmit vkQueueSubmit = (PFN_vkQueueSubmit)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkQueueSubmit");
+		if (!vkQueueSubmit) return false;
+
+		VkSubmitInfo submitInfo;
+		memset (&submitInfo, 0, sizeof (submitInfo));
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+
+		VkResult result = vkQueueSubmit (queue, 1, &submitInfo, fence);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkQueueSubmit failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	value lime_vk_get_last_error () {
 
 		return alloc_string (lastVKError.c_str ());
@@ -5371,6 +6806,25 @@ namespace lime {
 	DEFINE_PRIME3v (lime_vk_destroy_instance);
 	DEFINE_PRIME5v (lime_vk_destroy_surface);
 	DEFINE_PRIME5 (lime_vk_get_physical_devices);
+	DEFINE_PRIME7 (lime_vk_create_device);
+	DEFINE_PRIME5v (lime_vk_destroy_device);
+	DEFINE_PRIME5 (lime_vk_device_wait_idle);
+	DEFINE_PRIME7 (lime_vk_queue_wait_idle);
+	DEFINE_PRIME7 (lime_vk_create_command_pool);
+	DEFINE_PRIME7v (lime_vk_destroy_command_pool);
+	DEFINE_PRIME8 (lime_vk_reset_command_pool);
+	DEFINE_PRIME8 (lime_vk_allocate_command_buffer);
+	DEFINE_PRIME9v (lime_vk_free_command_buffer);
+	DEFINE_PRIME8 (lime_vk_begin_command_buffer);
+	DEFINE_PRIME7 (lime_vk_end_command_buffer);
+	DEFINE_PRIME8 (lime_vk_reset_command_buffer);
+	DEFINE_PRIME5 (lime_vk_create_semaphore);
+	DEFINE_PRIME7v (lime_vk_destroy_semaphore);
+	DEFINE_PRIME6 (lime_vk_create_fence);
+	DEFINE_PRIME7v (lime_vk_destroy_fence);
+	DEFINE_PRIME9 (lime_vk_wait_for_fence);
+	DEFINE_PRIME7 (lime_vk_reset_fence);
+	DEFINE_PRIME11 (lime_vk_queue_submit);
 	DEFINE_PRIME0 (lime_vk_get_last_error);
 	DEFINE_PRIME2 (lime_vulkan_renderer_create);
 	DEFINE_PRIME1v (lime_vulkan_renderer_destroy);
@@ -5587,6 +7041,25 @@ namespace lime {
 	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_instance, _TCFFIPOINTER _I32 _I32);
 	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_surface, _TCFFIPOINTER _I32 _I32 _I32 _I32);
 	DEFINE_HL_PRIM (_ARR, hl_vk_get_physical_devices, _TCFFIPOINTER _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_DYN, hl_vk_create_device, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _ARR);
+	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_device, _TCFFIPOINTER _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_device_wait_idle, _TCFFIPOINTER _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_queue_wait_idle, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_DYN, hl_vk_create_command_pool, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_command_pool, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_reset_command_pool, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_DYN, hl_vk_allocate_command_buffer, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_VOID, hl_vk_free_command_buffer, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_begin_command_buffer, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_end_command_buffer, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_reset_command_buffer, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_DYN, hl_vk_create_semaphore, _TCFFIPOINTER _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_semaphore, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_DYN, hl_vk_create_fence, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_VOID, hl_vk_destroy_fence, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_wait_for_fence, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_reset_fence, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32);
+	DEFINE_HL_PRIM (_BOOL, hl_vk_queue_submit, _TCFFIPOINTER _I32 _I32 _I32 _I32 _I32 _I32 _I32 _I32 _I32 _I32);
 	DEFINE_HL_PRIM (_BYTES, hl_vk_get_last_error, _NO_ARG);
 	DEFINE_HL_PRIM (_TCFFIPOINTER, hl_vulkan_renderer_create, _TCFFIPOINTER _STRING);
 	DEFINE_HL_PRIM (_VOID, hl_vulkan_renderer_destroy, _TCFFIPOINTER);

@@ -3,8 +3,11 @@ package lime.graphics.vulkan;
 import haxe.Int64;
 #if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFI;
+import lime._internal.backend.native.NativeCFFI;
 #end
 
+@:access(lime.graphics.VulkanRenderContext)
+@:access(lime._internal.backend.native.NativeCFFI)
 /**
 	Describes a Vulkan physical device discovered through a `VKInstance`.
 **/
@@ -62,6 +65,40 @@ class VKPhysicalDevice
 				}
 			}
 		}
+	}
+
+	/**
+		Creates a logical device with one queue from the requested queue family.
+		If no queue family is provided, Lime selects a graphics-capable family
+		that can present to the current surface when that data is available.
+	**/
+	public function createDevice(queueFamily:VKQueueFamilyInfo = null, extensions:Array<String> = null):VKDevice
+	{
+		if (queueFamily == null)
+		{
+			queueFamily = getQueueFamily(true, supportsPresent);
+		}
+
+		if (extensions == null)
+		{
+			extensions = [VK.KHR_SWAPCHAIN_EXTENSION_NAME];
+		}
+
+		if (queueFamily == null || instance == null || instance.context == null || !instance.isValid())
+		{
+			return null;
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		var data:Dynamic = NativeCFFI.lime_vk_create_device(instance.context.__windowHandle, instance.handle.high, instance.handle.low, handle.high,
+			handle.low, queueFamily.index, extensions);
+		if (data != null)
+		{
+			return new VKDevice(this, queueFamily, extensions, data);
+		}
+		#end
+
+		return null;
 	}
 
 	/**

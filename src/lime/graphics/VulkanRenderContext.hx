@@ -22,14 +22,15 @@ import lime._internal.backend.native.NativeCFFI;
 	The `VulkanRenderContext` exposes native Vulkan window bootstrap helpers when
 	Vulkan is the render context type of the current `Window`.
 
-	Lime does not provide Vulkan API bindings or manage swapchains for you.
-	Instead, this context focuses on the window-specific pieces an external
-	Vulkan layer needs:
+	This context owns the window-specific pieces of Lime's Vulkan API:
 
 	- required instance extensions for the current window
 	- the current drawable size in pixels
 	- Vulkan surface creation for an existing `VkInstance`
 	- access to `vkGetInstanceProcAddr`
+
+	Use `lime.graphics.vulkan.VK` and related classes for the broader Vulkan API
+	surface as it grows.
 **/
 @:access(lime._internal.backend.native.NativeCFFI)
 class VulkanRenderContext
@@ -141,10 +142,10 @@ class VulkanRenderContext
 	}
 
 	/**
-		Creates a minimal Vulkan swapchain renderer for the current window.
+		Creates Lime's validation Vulkan swapchain renderer for the current window.
 
-		This is intentionally narrow and currently only exposes clear-and-present
-		rendering so we can validate Lime's Vulkan window path end-to-end.
+		This renderer exists for smoke tests and samples while the public `VK`
+		surface grows into the full rendering API.
 		The renderer respects the current Lime `vsyncMode` preference when it
 		chooses a swapchain present mode.
 	**/
