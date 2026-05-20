@@ -238,6 +238,7 @@ class Window
 		__minimized = Reflect.hasField(__attributes, "minimized") ? __attributes.minimized : false;
 		id = -1;
 		__backend = new WindowBackend(this);
+		if (id != -1 && application != null) application.__seedFrameConfiguration(__attributes);
 		#if windows
 		var mappings = [
 			"8f0e1200000000000000504944564944,Acme,platform:Windows,x:b2,a:b0,b:b1,y:b3,back:b8,start:b9,dpleft:h0.8,dpdown:h0.4,dpright:h0.2,dpup:h0.1,leftshoulder:b4,lefttrigger:b5,rightshoulder:b6,righttrigger:b7,leftstick:b10,rightstick:b11,leftx:a0,lefty:a1,rightx:a3,righty:a2",
