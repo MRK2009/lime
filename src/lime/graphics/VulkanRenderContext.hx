@@ -3,8 +3,12 @@ package lime.graphics;
 import haxe.Int64;
 import lime.graphics.vulkan.VKRenderer;
 import lime.math.Vector2;
+#if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFI;
+#end
+#if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFIPointer;
+#end
 
 #if hl
 import hl.Bytes as HLBytes;
@@ -33,10 +37,10 @@ class VulkanRenderContext
 	public var type(default, null):RenderContextType;
 	public var version(default, null):String;
 
-	private var __windowHandle:CFFIPointer;
+	private var __windowHandle:#if (!lime_doc_gen || lime_cffi) CFFIPointer #else Dynamic #end;
 
 	@:allow(lime._internal.backend.native.NativeWindow)
-	private function new(windowHandle:CFFIPointer)
+	private function new(windowHandle:#if (!lime_doc_gen || lime_cffi) CFFIPointer #else Dynamic #end)
 	{
 		__windowHandle = windowHandle;
 		type = VULKAN;

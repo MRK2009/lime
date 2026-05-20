@@ -1,7 +1,9 @@
 package lime.graphics.vulkan;
 
 import haxe.Int64;
+#if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFI;
+#end
 
 /**
 	Describes a Vulkan physical device discovered through a `VKInstance`.
@@ -27,7 +29,7 @@ class VKPhysicalDevice
 	{
 		this.instance = instance;
 		handle = VK.__makeHandle(data.handle);
-		name = (data.name != null) ? CFFI.stringValue(data.name) : "";
+		name = (data.name != null) ? #if (!lime_doc_gen || lime_cffi) CFFI.stringValue(data.name) #else cast data.name #end : "";
 		apiVersion = data.apiVersion;
 		apiVersionString = VK.versionString(apiVersion);
 		driverVersion = data.driverVersion;

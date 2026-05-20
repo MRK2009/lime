@@ -2,7 +2,9 @@ package lime.graphics.vulkan;
 
 import haxe.Int64;
 import lime.graphics.VulkanRenderContext;
+#if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFI;
+#end
 
 #if (!lime_doc_gen || lime_cffi)
 import lime._internal.backend.native.NativeCFFI;

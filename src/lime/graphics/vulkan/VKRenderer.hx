@@ -1,8 +1,12 @@
 package lime.graphics.vulkan;
 
 import lime.graphics.Image;
+#if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFI;
+#end
+#if (!lime_doc_gen || lime_cffi)
 import lime.system.CFFIPointer;
+#end
 
 #if (!lime_doc_gen || lime_cffi)
 import lime._internal.backend.native.NativeCFFI;
@@ -20,11 +24,11 @@ class VKRenderer
 	public var isValid(get, never):Bool;
 	public var lastError(get, never):String;
 
-	private var __handle:CFFIPointer;
+	private var __handle:#if (!lime_doc_gen || lime_cffi) CFFIPointer #else Dynamic #end;
 	private var __info:String;
 
 	@:allow(lime.graphics.VulkanRenderContext)
-	private function new(handle:CFFIPointer)
+	private function new(handle:#if (!lime_doc_gen || lime_cffi) CFFIPointer #else Dynamic #end)
 	{
 		__handle = handle;
 		__info = "";
