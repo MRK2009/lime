@@ -920,7 +920,7 @@ class NativeCFFI
 	private static var lime_vulkan_renderer_destroy = CFFI.load("lime", "lime_vulkan_renderer_destroy", 1);
 	private static var lime_vulkan_renderer_get_info = CFFI.load("lime", "lime_vulkan_renderer_get_info", 1);
 	private static var lime_vulkan_renderer_get_last_error = CFFI.load("lime", "lime_vulkan_renderer_get_last_error", 0);
-	private static var lime_vulkan_renderer_set_overlay = CFFI.load("lime", "lime_vulkan_renderer_set_overlay", 6);
+	private static var lime_vulkan_renderer_set_overlay = CFFI.load("lime", "lime_vulkan_renderer_set_overlay", -1);
 	private static var lime_vulkan_renderer_clear_overlay = CFFI.load("lime", "lime_vulkan_renderer_clear_overlay", 1);
 	private static var lime_vulkan_renderer_render = CFFI.load("lime", "lime_vulkan_renderer_render", 5);
 	private static var lime_vulkan_renderer_resize = CFFI.load("lime", "lime_vulkan_renderer_resize", 1);

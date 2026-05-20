@@ -193,7 +193,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libx11-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libpulse-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev libvulkan-dev mesa-vulkan-drivers xvfb
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libx11-dev libx11-xcb1 libxext-dev libxi-dev libxrandr-dev libxinerama-dev libpulse-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev libvulkan-dev mesa-vulkan-drivers xvfb
 
       - uses: krdlab/setup-haxe@v2
         with:
@@ -230,7 +230,10 @@ jobs:
       - name: Run Vulkan smoke test app
         working-directory: tests/vulkan-smoke
         run: |
-          xvfb-run -a Export/linux/bin/LimeVulkanSmoke
+          if [ -f /usr/share/vulkan/icd.d/lvp_icd.x86_64.json ]; then
+            export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          fi
+          SDL_AUDIODRIVER=dummy xvfb-run -a Export/linux/bin/LimeVulkanSmoke
 
       - name: Install samples
         run: |

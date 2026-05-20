@@ -1578,7 +1578,16 @@ namespace lime {
 
 	Window* CreateWindow (Application* application, int width, int height, int flags, const char* title) {
 
-		return new SDLWindow (application, width, height, flags, title);
+		SDLWindow* window = new SDLWindow (application, width, height, flags, title);
+
+		if (!window->sdlWindow) {
+
+			delete window;
+			return 0;
+
+		}
+
+		return window;
 
 	}
 
