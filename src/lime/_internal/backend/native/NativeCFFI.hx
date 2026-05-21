@@ -1699,7 +1699,7 @@ class NativeCFFI
 			instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):Void {}
 
 	@:hlNative("lime", "hl_vk_get_physical_devices") private static function lime_vk_get_physical_devices(handle:CFFIPointer, instanceHigh:Int,
-			instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):Dynamic
+			instanceLow:Int, surfaceHigh:Int, surfaceLow:Int):hl.NativeArray<Dynamic>
 	{
 		return null;
 	}
@@ -1830,7 +1830,7 @@ class NativeCFFI
 	}
 
 	@:hlNative("lime", "hl_vulkan_renderer_set_overlay") private static function lime_vulkan_renderer_set_overlay(handle:CFFIPointer,
-			bytes:hl.Bytes, width:Int, height:Int, x:Int, y:Int):Bool
+			bytes:Bytes, width:Int, height:Int, x:Int, y:Int):Bool
 	{
 		return false;
 	}
