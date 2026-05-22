@@ -59,4 +59,17 @@ class VKDescriptorPool
 	{
 		return !VK.__isZero(handle);
 	}
+
+	public function reset(flags:Int = 0):Bool
+	{
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			return NativeCFFI.lime_vk_reset_descriptor_pool(device.instance.context.__windowHandle, device.instance.handle.high, device.instance.handle.low,
+				device.handle.high, device.handle.low, handle.high, handle.low, flags);
+		}
+		#end
+
+		return false;
+	}
 }

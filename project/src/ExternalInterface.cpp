@@ -964,6 +964,11 @@ namespace lime {
 			imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 		}
+		if (capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+
+			imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+		}
 
 		uint32_t imageCount = capabilities.minImageCount + 1;
 		if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
@@ -6488,6 +6493,89 @@ namespace lime {
 	}
 
 
+	bool lime_vk_download_memory (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int memoryHigh, int memoryLow,
+		int offsetHigh, int offsetLow, value bytes, int byteOffset, int byteLength) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		uint64_t offset = CombineVulkanHandle (offsetHigh, offsetLow);
+		Bytes data (bytes);
+		if (!memory || !data.b || byteOffset < 0 || byteLength < 0 || byteOffset + byteLength > data.length) {
+
+			lastVKError = "Invalid Vulkan memory download range";
+			return false;
+
+		}
+
+		PFN_vkMapMemory vkMapMemory = (PFN_vkMapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkMapMemory");
+		PFN_vkUnmapMemory vkUnmapMemory = (PFN_vkUnmapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUnmapMemory");
+		if (!vkMapMemory || !vkUnmapMemory) return false;
+
+		void* mappedData = 0;
+		VkResult result = vkMapMemory (device, memory, (VkDeviceSize)offset, (VkDeviceSize)byteLength, 0, &mappedData);
+		if (result != VK_SUCCESS || !mappedData) {
+
+			lastVKError = "vkMapMemory failed";
+			return false;
+
+		}
+
+		memcpy (data.b + byteOffset, mappedData, byteLength);
+		vkUnmapMemory (device, memory);
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_download_memory) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int memoryHigh, int memoryLow, int offsetHigh, int offsetLow, Bytes* bytes, int byteOffset, int byteLength) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		uint64_t offset = CombineVulkanHandle (offsetHigh, offsetLow);
+		if (!memory || !bytes || !bytes->b || byteOffset < 0 || byteLength < 0 || byteOffset + byteLength > bytes->length) {
+
+			lastVKError = "Invalid Vulkan memory download range";
+			return false;
+
+		}
+
+		PFN_vkMapMemory vkMapMemory = (PFN_vkMapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkMapMemory");
+		PFN_vkUnmapMemory vkUnmapMemory = (PFN_vkUnmapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUnmapMemory");
+		if (!vkMapMemory || !vkUnmapMemory) return false;
+
+		void* mappedData = 0;
+		VkResult result = vkMapMemory (device, memory, (VkDeviceSize)offset, (VkDeviceSize)byteLength, 0, &mappedData);
+		if (result != VK_SUCCESS || !mappedData) {
+
+			lastVKError = "vkMapMemory failed";
+			return false;
+
+		}
+
+		memcpy (bytes->b + byteOffset, mappedData, byteLength);
+		vkUnmapMemory (device, memory);
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	value lime_vk_create_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int sizeHigh, int sizeLow, int usage) {
 
 #ifdef LIME_VULKAN
@@ -8595,6 +8683,66 @@ namespace lime {
 	}
 
 
+	bool lime_vk_reset_descriptor_pool (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int poolHigh, int poolLow,
+		int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDescriptorPool pool = (VkDescriptorPool)(uintptr_t)CombineVulkanHandle (poolHigh, poolLow);
+		PFN_vkResetDescriptorPool vkResetDescriptorPool =
+			(PFN_vkResetDescriptorPool)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkResetDescriptorPool");
+		if (!vkResetDescriptorPool || !pool) return false;
+
+		VkResult result = vkResetDescriptorPool (device, pool, (VkDescriptorPoolResetFlags)flags);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetDescriptorPool failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_reset_descriptor_pool) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int poolHigh, int poolLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDescriptorPool pool = (VkDescriptorPool)(uintptr_t)CombineVulkanHandle (poolHigh, poolLow);
+		PFN_vkResetDescriptorPool vkResetDescriptorPool =
+			(PFN_vkResetDescriptorPool)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkResetDescriptorPool");
+		if (!vkResetDescriptorPool || !pool) return false;
+
+		VkResult result = vkResetDescriptorPool (device, pool, (VkDescriptorPoolResetFlags)flags);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkResetDescriptorPool failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	value lime_vk_allocate_descriptor_set (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int poolHigh,
 		int poolLow, int layoutHigh, int layoutLow) {
 
@@ -9018,7 +9166,8 @@ namespace lime {
 	}
 
 
-	value lime_vk_create_pipeline_cache (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+	value lime_vk_create_pipeline_cache (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, value bytes, int byteOffset,
+		int byteLength) {
 
 #ifdef LIME_VULKAN
 		Window* targetWindow = (Window*)val_data (window);
@@ -9031,6 +9180,20 @@ namespace lime {
 		VkPipelineCacheCreateInfo createInfo;
 		memset (&createInfo, 0, sizeof (createInfo));
 		createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		Bytes initialData (bytes);
+		if (initialData.b && byteLength > 0) {
+
+			if (byteOffset < 0 || byteOffset + byteLength > initialData.length) {
+
+				lastVKError = "Invalid Vulkan pipeline cache data range";
+				return alloc_null ();
+
+			}
+
+			createInfo.initialDataSize = (size_t)byteLength;
+			createInfo.pInitialData = initialData.b + byteOffset;
+
+		}
 
 		VkPipelineCache cache = VK_NULL_HANDLE;
 		VkResult result = vkCreatePipelineCache (device, &createInfo, 0, &cache);
@@ -9052,7 +9215,7 @@ namespace lime {
 
 
 	HL_PRIM vdynamic* HL_NAME(hl_vk_create_pipeline_cache) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
-		int deviceLow) {
+		int deviceLow, Bytes* bytes, int byteOffset, int byteLength) {
 
 #ifdef LIME_VULKAN
 		Window* targetWindow = (Window*)window->ptr;
@@ -9065,6 +9228,19 @@ namespace lime {
 		VkPipelineCacheCreateInfo createInfo;
 		memset (&createInfo, 0, sizeof (createInfo));
 		createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		if (bytes && bytes->b && byteLength > 0) {
+
+			if (byteOffset < 0 || byteOffset + byteLength > bytes->length) {
+
+				lastVKError = "Invalid Vulkan pipeline cache data range";
+				return 0;
+
+			}
+
+			createInfo.initialDataSize = (size_t)byteLength;
+			createInfo.pInitialData = bytes->b + byteOffset;
+
+		}
 
 		VkPipelineCache cache = VK_NULL_HANDLE;
 		VkResult result = vkCreatePipelineCache (device, &createInfo, 0, &cache);
@@ -9080,6 +9256,92 @@ namespace lime {
 #else
 		lastVKError = "Lime was built without lime-vulkan support";
 		return 0;
+#endif
+
+	}
+
+
+	bool lime_vk_get_pipeline_cache_data (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int cacheHigh,
+		int cacheLow, value bytes) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkPipelineCache cache = (VkPipelineCache)(uintptr_t)CombineVulkanHandle (cacheHigh, cacheLow);
+		PFN_vkGetPipelineCacheData vkGetPipelineCacheData =
+			(PFN_vkGetPipelineCacheData)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkGetPipelineCacheData");
+		if (!vkGetPipelineCacheData || !cache) return false;
+
+		size_t size = 0;
+		VkResult result = vkGetPipelineCacheData (device, cache, &size, 0);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkGetPipelineCacheData failed";
+			return false;
+
+		}
+
+		Bytes data (bytes);
+		data.Resize ((int)size);
+		if (size > 0 && !data.b) return false;
+
+		result = vkGetPipelineCacheData (device, cache, &size, data.b);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkGetPipelineCacheData failed";
+			return false;
+
+		}
+
+		data.Value (bytes);
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_get_pipeline_cache_data) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int cacheHigh, int cacheLow, Bytes* bytes) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkPipelineCache cache = (VkPipelineCache)(uintptr_t)CombineVulkanHandle (cacheHigh, cacheLow);
+		PFN_vkGetPipelineCacheData vkGetPipelineCacheData =
+			(PFN_vkGetPipelineCacheData)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkGetPipelineCacheData");
+		if (!vkGetPipelineCacheData || !cache || !bytes) return false;
+
+		size_t size = 0;
+		VkResult result = vkGetPipelineCacheData (device, cache, &size, 0);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkGetPipelineCacheData failed";
+			return false;
+
+		}
+
+		bytes->Resize ((int)size);
+		if (size > 0 && !bytes->b) return false;
+
+		result = vkGetPipelineCacheData (device, cache, &size, bytes->b);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkGetPipelineCacheData failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
 #endif
 
 	}
@@ -9145,7 +9407,7 @@ namespace lime {
 	static VkPipeline CreateManagedVulkanGraphicsPipeline (Window* targetWindow, VkInstance instance, VkDevice device, VkRenderPass renderPass,
 		VkPipelineLayout layout, VkShaderModule vertexShader, VkShaderModule fragmentShader, const std::vector<int>& state) {
 
-		if (state.size () < 19 || !renderPass || !layout || !vertexShader || !fragmentShader) {
+		if (state.size () < 35 || !renderPass || !layout || !vertexShader || !fragmentShader) {
 
 			lastVKError = "Invalid Vulkan graphics pipeline state";
 			return VK_NULL_HANDLE;
@@ -9171,6 +9433,22 @@ namespace lime {
 		int dstAlphaBlendFactor = state[cursor++];
 		int alphaBlendOp = state[cursor++];
 		int dynamicStateFlags = state[cursor++];
+		int colorWriteMask = state[cursor++];
+		bool stencilTest = state[cursor++] != 0;
+		int frontFailOp = state[cursor++];
+		int frontPassOp = state[cursor++];
+		int frontDepthFailOp = state[cursor++];
+		int frontCompareOp = state[cursor++];
+		int frontCompareMask = state[cursor++];
+		int frontWriteMask = state[cursor++];
+		int frontReference = state[cursor++];
+		int backFailOp = state[cursor++];
+		int backPassOp = state[cursor++];
+		int backDepthFailOp = state[cursor++];
+		int backCompareOp = state[cursor++];
+		int backCompareMask = state[cursor++];
+		int backWriteMask = state[cursor++];
+		int backReference = state[cursor++];
 		int bindingCount = state[cursor++];
 
 		if ((int)state.size () < cursor + bindingCount * 3 + 1) {
@@ -9280,10 +9558,25 @@ namespace lime {
 		depthStencil.depthTestEnable = depthTest ? VK_TRUE : VK_FALSE;
 		depthStencil.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
 		depthStencil.depthCompareOp = (VkCompareOp)depthCompareOp;
+		depthStencil.stencilTestEnable = stencilTest ? VK_TRUE : VK_FALSE;
+		depthStencil.front.failOp = (VkStencilOp)frontFailOp;
+		depthStencil.front.passOp = (VkStencilOp)frontPassOp;
+		depthStencil.front.depthFailOp = (VkStencilOp)frontDepthFailOp;
+		depthStencil.front.compareOp = (VkCompareOp)frontCompareOp;
+		depthStencil.front.compareMask = (uint32_t)frontCompareMask;
+		depthStencil.front.writeMask = (uint32_t)frontWriteMask;
+		depthStencil.front.reference = (uint32_t)frontReference;
+		depthStencil.back.failOp = (VkStencilOp)backFailOp;
+		depthStencil.back.passOp = (VkStencilOp)backPassOp;
+		depthStencil.back.depthFailOp = (VkStencilOp)backDepthFailOp;
+		depthStencil.back.compareOp = (VkCompareOp)backCompareOp;
+		depthStencil.back.compareMask = (uint32_t)backCompareMask;
+		depthStencil.back.writeMask = (uint32_t)backWriteMask;
+		depthStencil.back.reference = (uint32_t)backReference;
 
 		VkPipelineColorBlendAttachmentState colorAttachment;
 		memset (&colorAttachment, 0, sizeof (colorAttachment));
-		colorAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+		colorAttachment.colorWriteMask = (VkColorComponentFlags)colorWriteMask;
 		colorAttachment.blendEnable = blend ? VK_TRUE : VK_FALSE;
 		colorAttachment.srcColorBlendFactor = (VkBlendFactor)srcColorBlendFactor;
 		colorAttachment.dstColorBlendFactor = (VkBlendFactor)dstColorBlendFactor;
@@ -9768,6 +10061,70 @@ namespace lime {
 
 	}
 
+	bool lime_vk_cmd_bind_descriptor_set_ex (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, value state) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets =
+			(PFN_vkCmdBindDescriptorSets)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdBindDescriptorSets");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkPipelineLayout layout = (VkPipelineLayout)(uintptr_t)CombineVulkanHandle (layoutHigh, layoutLow);
+		VkDescriptorSet descriptorSet = (VkDescriptorSet)(uintptr_t)CombineVulkanHandle (setHigh, setLow);
+		std::vector<int> packed = GetVulkanIntVector (state);
+		if (!vkCmdBindDescriptorSets || !commandBuffer || !layout || !descriptorSet || packed.size () < 3) return false;
+
+		int dynamicOffsetCount = packed[2];
+		if ((int)packed.size () < 3 + dynamicOffsetCount) return false;
+		std::vector<uint32_t> dynamicOffsets;
+		dynamicOffsets.reserve ((size_t)dynamicOffsetCount);
+		for (int i = 0; i < dynamicOffsetCount; ++i) dynamicOffsets.push_back ((uint32_t)packed[3 + i]);
+
+		vkCmdBindDescriptorSets (commandBuffer, (VkPipelineBindPoint)packed[0], layout, (uint32_t)packed[1], 1, &descriptorSet,
+			(uint32_t)dynamicOffsets.size (), dynamicOffsets.empty () ? 0 : dynamicOffsets.data ());
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_bind_descriptor_set_ex) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, hl_varray* state) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets =
+			(PFN_vkCmdBindDescriptorSets)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdBindDescriptorSets");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkPipelineLayout layout = (VkPipelineLayout)(uintptr_t)CombineVulkanHandle (layoutHigh, layoutLow);
+		VkDescriptorSet descriptorSet = (VkDescriptorSet)(uintptr_t)CombineVulkanHandle (setHigh, setLow);
+		std::vector<int> packed = GetHLVulkanIntVector (state);
+		if (!vkCmdBindDescriptorSets || !commandBuffer || !layout || !descriptorSet || packed.size () < 3) return false;
+
+		int dynamicOffsetCount = packed[2];
+		if ((int)packed.size () < 3 + dynamicOffsetCount) return false;
+		std::vector<uint32_t> dynamicOffsets;
+		dynamicOffsets.reserve ((size_t)dynamicOffsetCount);
+		for (int i = 0; i < dynamicOffsetCount; ++i) dynamicOffsets.push_back ((uint32_t)packed[3 + i]);
+
+		vkCmdBindDescriptorSets (commandBuffer, (VkPipelineBindPoint)packed[0], layout, (uint32_t)packed[1], 1, &descriptorSet,
+			(uint32_t)dynamicOffsets.size (), dynamicOffsets.empty () ? 0 : dynamicOffsets.data ());
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	value lime_vulkan_renderer_get_info (value handle) {
 
 		if (val_is_null (handle)) return alloc_string ("");
@@ -10183,6 +10540,162 @@ namespace lime {
 
 	}
 
+
+	bool lime_vk_cmd_copy_buffer_to_image_region (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int imageHigh, int imageLow, value state) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage =
+			(PFN_vkCmdCopyBufferToImage)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdCopyBufferToImage");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetVulkanIntVector (state);
+		if (!vkCmdCopyBufferToImage || !commandBuffer || packed.size () < 15) return false;
+
+		VkBufferImageCopy region;
+		memset (&region, 0, sizeof (region));
+		region.bufferOffset = (VkDeviceSize)CombineVulkanHandle (packed[4], packed[5]);
+		region.bufferRowLength = (uint32_t)packed[6];
+		region.bufferImageHeight = (uint32_t)packed[7];
+		region.imageSubresource.aspectMask = (VkImageAspectFlags)packed[14];
+		region.imageSubresource.mipLevel = (uint32_t)packed[11];
+		region.imageSubresource.baseArrayLayer = (uint32_t)packed[12];
+		region.imageSubresource.layerCount = (uint32_t)packed[13];
+		region.imageOffset.x = packed[8];
+		region.imageOffset.y = packed[9];
+		region.imageOffset.z = packed[10];
+		region.imageExtent.width = (uint32_t)packed[0];
+		region.imageExtent.height = (uint32_t)packed[1];
+		region.imageExtent.depth = (uint32_t)packed[2];
+		vkCmdCopyBufferToImage (commandBuffer, (VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow),
+			(VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[3], 1, &region);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_copy_buffer_to_image_region) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int imageHigh, int imageLow, hl_varray* state) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage =
+			(PFN_vkCmdCopyBufferToImage)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdCopyBufferToImage");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetHLVulkanIntVector (state);
+		if (!vkCmdCopyBufferToImage || !commandBuffer || packed.size () < 15) return false;
+
+		VkBufferImageCopy region;
+		memset (&region, 0, sizeof (region));
+		region.bufferOffset = (VkDeviceSize)CombineVulkanHandle (packed[4], packed[5]);
+		region.bufferRowLength = (uint32_t)packed[6];
+		region.bufferImageHeight = (uint32_t)packed[7];
+		region.imageSubresource.aspectMask = (VkImageAspectFlags)packed[14];
+		region.imageSubresource.mipLevel = (uint32_t)packed[11];
+		region.imageSubresource.baseArrayLayer = (uint32_t)packed[12];
+		region.imageSubresource.layerCount = (uint32_t)packed[13];
+		region.imageOffset.x = packed[8];
+		region.imageOffset.y = packed[9];
+		region.imageOffset.z = packed[10];
+		region.imageExtent.width = (uint32_t)packed[0];
+		region.imageExtent.height = (uint32_t)packed[1];
+		region.imageExtent.depth = (uint32_t)packed[2];
+		vkCmdCopyBufferToImage (commandBuffer, (VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow),
+			(VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[3], 1, &region);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_cmd_copy_image_to_buffer_region (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, int bufferHigh, int bufferLow, value state) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer =
+			(PFN_vkCmdCopyImageToBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdCopyImageToBuffer");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetVulkanIntVector (state);
+		if (!vkCmdCopyImageToBuffer || !commandBuffer || packed.size () < 15) return false;
+
+		VkBufferImageCopy region;
+		memset (&region, 0, sizeof (region));
+		region.bufferOffset = (VkDeviceSize)CombineVulkanHandle (packed[4], packed[5]);
+		region.bufferRowLength = (uint32_t)packed[6];
+		region.bufferImageHeight = (uint32_t)packed[7];
+		region.imageSubresource.aspectMask = (VkImageAspectFlags)packed[14];
+		region.imageSubresource.mipLevel = (uint32_t)packed[11];
+		region.imageSubresource.baseArrayLayer = (uint32_t)packed[12];
+		region.imageSubresource.layerCount = (uint32_t)packed[13];
+		region.imageOffset.x = packed[8];
+		region.imageOffset.y = packed[9];
+		region.imageOffset.z = packed[10];
+		region.imageExtent.width = (uint32_t)packed[0];
+		region.imageExtent.height = (uint32_t)packed[1];
+		region.imageExtent.depth = (uint32_t)packed[2];
+		vkCmdCopyImageToBuffer (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[3],
+			(VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow), 1, &region);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_copy_image_to_buffer_region) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, int bufferHigh, int bufferLow, hl_varray* state) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer =
+			(PFN_vkCmdCopyImageToBuffer)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdCopyImageToBuffer");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetHLVulkanIntVector (state);
+		if (!vkCmdCopyImageToBuffer || !commandBuffer || packed.size () < 15) return false;
+
+		VkBufferImageCopy region;
+		memset (&region, 0, sizeof (region));
+		region.bufferOffset = (VkDeviceSize)CombineVulkanHandle (packed[4], packed[5]);
+		region.bufferRowLength = (uint32_t)packed[6];
+		region.bufferImageHeight = (uint32_t)packed[7];
+		region.imageSubresource.aspectMask = (VkImageAspectFlags)packed[14];
+		region.imageSubresource.mipLevel = (uint32_t)packed[11];
+		region.imageSubresource.baseArrayLayer = (uint32_t)packed[12];
+		region.imageSubresource.layerCount = (uint32_t)packed[13];
+		region.imageOffset.x = packed[8];
+		region.imageOffset.y = packed[9];
+		region.imageOffset.z = packed[10];
+		region.imageExtent.width = (uint32_t)packed[0];
+		region.imageExtent.height = (uint32_t)packed[1];
+		region.imageExtent.depth = (uint32_t)packed[2];
+		vkCmdCopyImageToBuffer (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[3],
+			(VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow), 1, &region);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
 	HL_PRIM vbyte* HL_NAME(hl_vulkan_renderer_get_last_error) () {
 
 		return hl_copy_bytes ((const vbyte*)lastVulkanRendererError.c_str (), (int)lastVulkanRendererError.size () + 1);
@@ -10334,6 +10847,76 @@ namespace lime {
 	}
 
 
+	bool lime_vk_cmd_clear_depth_stencil_image (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, value state, value clear) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdClearDepthStencilImage vkCmdClearDepthStencilImage =
+			(PFN_vkCmdClearDepthStencilImage)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdClearDepthStencilImage");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetVulkanIntVector (state);
+		std::vector<double> clearValues = GetVulkanDoubleVector (clear);
+		if (!vkCmdClearDepthStencilImage || !commandBuffer || packed.size () < 7 || clearValues.size () < 1) return false;
+
+		VkClearDepthStencilValue depthStencil;
+		depthStencil.depth = (float)clearValues[0];
+		depthStencil.stencil = (uint32_t)packed[1];
+		VkImageSubresourceRange range;
+		memset (&range, 0, sizeof (range));
+		range.aspectMask = (VkImageAspectFlags)packed[2];
+		range.baseMipLevel = (uint32_t)packed[3];
+		range.levelCount = (uint32_t)packed[4];
+		range.baseArrayLayer = (uint32_t)packed[5];
+		range.layerCount = (uint32_t)packed[6];
+		vkCmdClearDepthStencilImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[0],
+			&depthStencil, 1, &range);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_clear_depth_stencil_image) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, hl_varray* state, hl_varray* clear) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdClearDepthStencilImage vkCmdClearDepthStencilImage =
+			(PFN_vkCmdClearDepthStencilImage)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdClearDepthStencilImage");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetHLVulkanIntVector (state);
+		std::vector<double> clearValues = GetHLVulkanDoubleVector (clear);
+		if (!vkCmdClearDepthStencilImage || !commandBuffer || packed.size () < 7 || clearValues.size () < 1) return false;
+
+		VkClearDepthStencilValue depthStencil;
+		depthStencil.depth = (float)clearValues[0];
+		depthStencil.stencil = (uint32_t)packed[1];
+		VkImageSubresourceRange range;
+		memset (&range, 0, sizeof (range));
+		range.aspectMask = (VkImageAspectFlags)packed[2];
+		range.baseMipLevel = (uint32_t)packed[3];
+		range.levelCount = (uint32_t)packed[4];
+		range.baseArrayLayer = (uint32_t)packed[5];
+		range.layerCount = (uint32_t)packed[6];
+		vkCmdClearDepthStencilImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[0],
+			&depthStencil, 1, &range);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	bool lime_vk_cmd_blit_image (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
 		int commandBufferLow, int sourceHigh, int sourceLow, int destinationHigh, int destinationLow, value state) {
 
@@ -10348,18 +10931,52 @@ namespace lime {
 
 		VkImageBlit blit;
 		memset (&blit, 0, sizeof (blit));
-		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		blit.srcSubresource.layerCount = 1;
-		blit.srcOffsets[1].x = packed[0];
-		blit.srcOffsets[1].y = packed[1];
-		blit.srcOffsets[1].z = 1;
-		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		blit.dstSubresource.layerCount = 1;
-		blit.dstOffsets[1].x = packed[0];
-		blit.dstOffsets[1].y = packed[1];
-		blit.dstOffsets[1].z = 1;
-		vkCmdBlitImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (sourceHigh, sourceLow), (VkImageLayout)packed[2],
-			(VkImage)(uintptr_t)CombineVulkanHandle (destinationHigh, destinationLow), (VkImageLayout)packed[3], 1, &blit, (VkFilter)packed[4]);
+		int sourceLayout = packed[2];
+		int destinationLayout = packed[3];
+		int filter = packed[4];
+		if (packed.size () >= 21) {
+
+			blit.srcOffsets[0].x = packed[0];
+			blit.srcOffsets[0].y = packed[1];
+			blit.srcOffsets[0].z = packed[2];
+			blit.srcOffsets[1].x = packed[3];
+			blit.srcOffsets[1].y = packed[4];
+			blit.srcOffsets[1].z = packed[5];
+			blit.dstOffsets[0].x = packed[6];
+			blit.dstOffsets[0].y = packed[7];
+			blit.dstOffsets[0].z = packed[8];
+			blit.dstOffsets[1].x = packed[9];
+			blit.dstOffsets[1].y = packed[10];
+			blit.dstOffsets[1].z = packed[11];
+			sourceLayout = packed[12];
+			destinationLayout = packed[13];
+			filter = packed[14];
+			blit.srcSubresource.mipLevel = (uint32_t)packed[15];
+			blit.dstSubresource.mipLevel = (uint32_t)packed[16];
+			blit.srcSubresource.baseArrayLayer = (uint32_t)packed[17];
+			blit.dstSubresource.baseArrayLayer = (uint32_t)packed[18];
+			blit.srcSubresource.layerCount = (uint32_t)packed[19];
+			blit.dstSubresource.layerCount = (uint32_t)packed[19];
+			blit.srcSubresource.aspectMask = (VkImageAspectFlags)packed[20];
+			blit.dstSubresource.aspectMask = (VkImageAspectFlags)packed[20];
+
+		} else {
+
+			blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.srcSubresource.layerCount = 1;
+			blit.srcOffsets[1].x = packed[0];
+			blit.srcOffsets[1].y = packed[1];
+			blit.srcOffsets[1].z = 1;
+			blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.dstSubresource.layerCount = 1;
+			blit.dstOffsets[1].x = packed[0];
+			blit.dstOffsets[1].y = packed[1];
+			blit.dstOffsets[1].z = 1;
+
+		}
+		vkCmdBlitImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (sourceHigh, sourceLow), (VkImageLayout)sourceLayout,
+			(VkImage)(uintptr_t)CombineVulkanHandle (destinationHigh, destinationLow), (VkImageLayout)destinationLayout, 1, &blit,
+			(VkFilter)filter);
 		return true;
 #else
 		lastVKError = "Lime was built without lime-vulkan support";
@@ -10383,18 +11000,52 @@ namespace lime {
 
 		VkImageBlit blit;
 		memset (&blit, 0, sizeof (blit));
-		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		blit.srcSubresource.layerCount = 1;
-		blit.srcOffsets[1].x = packed[0];
-		blit.srcOffsets[1].y = packed[1];
-		blit.srcOffsets[1].z = 1;
-		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		blit.dstSubresource.layerCount = 1;
-		blit.dstOffsets[1].x = packed[0];
-		blit.dstOffsets[1].y = packed[1];
-		blit.dstOffsets[1].z = 1;
-		vkCmdBlitImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (sourceHigh, sourceLow), (VkImageLayout)packed[2],
-			(VkImage)(uintptr_t)CombineVulkanHandle (destinationHigh, destinationLow), (VkImageLayout)packed[3], 1, &blit, (VkFilter)packed[4]);
+		int sourceLayout = packed[2];
+		int destinationLayout = packed[3];
+		int filter = packed[4];
+		if (packed.size () >= 21) {
+
+			blit.srcOffsets[0].x = packed[0];
+			blit.srcOffsets[0].y = packed[1];
+			blit.srcOffsets[0].z = packed[2];
+			blit.srcOffsets[1].x = packed[3];
+			blit.srcOffsets[1].y = packed[4];
+			blit.srcOffsets[1].z = packed[5];
+			blit.dstOffsets[0].x = packed[6];
+			blit.dstOffsets[0].y = packed[7];
+			blit.dstOffsets[0].z = packed[8];
+			blit.dstOffsets[1].x = packed[9];
+			blit.dstOffsets[1].y = packed[10];
+			blit.dstOffsets[1].z = packed[11];
+			sourceLayout = packed[12];
+			destinationLayout = packed[13];
+			filter = packed[14];
+			blit.srcSubresource.mipLevel = (uint32_t)packed[15];
+			blit.dstSubresource.mipLevel = (uint32_t)packed[16];
+			blit.srcSubresource.baseArrayLayer = (uint32_t)packed[17];
+			blit.dstSubresource.baseArrayLayer = (uint32_t)packed[18];
+			blit.srcSubresource.layerCount = (uint32_t)packed[19];
+			blit.dstSubresource.layerCount = (uint32_t)packed[19];
+			blit.srcSubresource.aspectMask = (VkImageAspectFlags)packed[20];
+			blit.dstSubresource.aspectMask = (VkImageAspectFlags)packed[20];
+
+		} else {
+
+			blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.srcSubresource.layerCount = 1;
+			blit.srcOffsets[1].x = packed[0];
+			blit.srcOffsets[1].y = packed[1];
+			blit.srcOffsets[1].z = 1;
+			blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.dstSubresource.layerCount = 1;
+			blit.dstOffsets[1].x = packed[0];
+			blit.dstOffsets[1].y = packed[1];
+			blit.dstOffsets[1].z = 1;
+
+		}
+		vkCmdBlitImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (sourceHigh, sourceLow), (VkImageLayout)sourceLayout,
+			(VkImage)(uintptr_t)CombineVulkanHandle (destinationHigh, destinationLow), (VkImageLayout)destinationLayout, 1, &blit,
+			(VkFilter)filter);
 		return true;
 #else
 		lastVKError = "Lime was built without lime-vulkan support";
@@ -10402,6 +11053,58 @@ namespace lime {
 #endif
 
 	}
+
+
+	bool lime_vk_cmd_push_constants (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int layoutHigh, int layoutLow, value state, value bytes) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdPushConstants vkCmdPushConstants =
+			(PFN_vkCmdPushConstants)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdPushConstants");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkPipelineLayout layout = (VkPipelineLayout)(uintptr_t)CombineVulkanHandle (layoutHigh, layoutLow);
+		std::vector<int> packed = GetVulkanIntVector (state);
+		Bytes data (bytes);
+		if (!vkCmdPushConstants || !commandBuffer || !layout || !data.b || packed.size () < 4) return false;
+		if (packed[2] < 0 || packed[3] < 0 || packed[2] + packed[3] > data.length) return false;
+
+		vkCmdPushConstants (commandBuffer, layout, (VkShaderStageFlags)packed[0], (uint32_t)packed[1], (uint32_t)packed[3], data.b + packed[2]);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_push_constants) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, hl_varray* state, Bytes* bytes) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdPushConstants vkCmdPushConstants =
+			(PFN_vkCmdPushConstants)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdPushConstants");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkPipelineLayout layout = (VkPipelineLayout)(uintptr_t)CombineVulkanHandle (layoutHigh, layoutLow);
+		std::vector<int> packed = GetHLVulkanIntVector (state);
+		if (!vkCmdPushConstants || !commandBuffer || !layout || !bytes || !bytes->b || packed.size () < 4) return false;
+		if (packed[2] < 0 || packed[3] < 0 || packed[2] + packed[3] > bytes->length) return false;
+
+		vkCmdPushConstants (commandBuffer, layout, (VkShaderStageFlags)packed[0], (uint32_t)packed[1], (uint32_t)packed[3], bytes->b + packed[2]);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
 
 	bool lime_vulkan_renderer_set_overlay (value handle, value bytes, int width, int height, int x, int y) {
 
@@ -10570,7 +11273,8 @@ namespace lime {
 	}
 
 
-	value lime_vk_create_pipeline_cache (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow) {
+	value lime_vk_create_pipeline_cache (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, value bytes, int byteOffset,
+		int byteLength) {
 
 		return LimeVulkanUnavailableValue ();
 
@@ -10578,7 +11282,7 @@ namespace lime {
 
 
 	HL_PRIM vdynamic* HL_NAME(hl_vk_create_pipeline_cache) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
-		int deviceLow) {
+		int deviceLow, Bytes* bytes, int byteOffset, int byteLength) {
 
 		return HLLimeVulkanUnavailableValue ();
 
@@ -10597,6 +11301,22 @@ namespace lime {
 		int deviceLow, int cacheHigh, int cacheLow) {
 
 		LimeVulkanUnavailableVoid ();
+
+	}
+
+
+	bool lime_vk_get_pipeline_cache_data (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int cacheHigh,
+		int cacheLow, value bytes) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_get_pipeline_cache_data) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int cacheHigh, int cacheLow, Bytes* bytes) {
+
+		return LimeVulkanUnavailableBool ();
 
 	}
 
@@ -10711,6 +11431,22 @@ namespace lime {
 	HL_PRIM bool HL_NAME(hl_vk_cmd_bind_descriptor_set) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
 		int deviceLow, int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, int bindPoint,
 		int firstSet) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	bool lime_vk_cmd_bind_descriptor_set_ex (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, value state) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_bind_descriptor_set_ex) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, hl_varray* state) {
 
 		return LimeVulkanUnavailableBool ();
 
@@ -10846,6 +11582,38 @@ namespace lime {
 	}
 
 
+	bool lime_vk_cmd_copy_buffer_to_image_region (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int imageHigh, int imageLow, value state) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_copy_buffer_to_image_region) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int imageHigh, int imageLow, hl_varray* state) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	bool lime_vk_cmd_copy_image_to_buffer_region (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, int bufferHigh, int bufferLow, value state) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_copy_image_to_buffer_region) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, int bufferHigh, int bufferLow, hl_varray* state) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
 	bool lime_vk_cmd_pipeline_barrier_image (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
 		int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, value state) {
 
@@ -10878,6 +11646,22 @@ namespace lime {
 	}
 
 
+	bool lime_vk_cmd_clear_depth_stencil_image (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, value state, value clear) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_clear_depth_stencil_image) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, hl_varray* state, hl_varray* clear) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
 	bool lime_vk_cmd_blit_image (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
 		int commandBufferLow, int sourceHigh, int sourceLow, int destinationHigh, int destinationLow, value state) {
 
@@ -10888,6 +11672,22 @@ namespace lime {
 
 	HL_PRIM bool HL_NAME(hl_vk_cmd_blit_image) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
 		int commandBufferHigh, int commandBufferLow, int sourceHigh, int sourceLow, int destinationHigh, int destinationLow, hl_varray* state) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	bool lime_vk_cmd_push_constants (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int layoutHigh, int layoutLow, value state, value bytes) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_push_constants) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, hl_varray* state, Bytes* bytes) {
 
 		return LimeVulkanUnavailableBool ();
 
@@ -11810,6 +12610,7 @@ namespace lime {
 	DEFINE_PRIME11 (lime_vk_allocate_memory);
 	DEFINE_PRIME7v (lime_vk_free_memory);
 	DEFINE_PRIME12 (lime_vk_upload_memory);
+	DEFINE_PRIME12 (lime_vk_download_memory);
 	DEFINE_PRIME8 (lime_vk_create_buffer);
 	DEFINE_PRIME7v (lime_vk_destroy_buffer);
 	DEFINE_PRIME7 (lime_vk_get_buffer_memory_requirements);
@@ -11838,13 +12639,15 @@ namespace lime {
 	DEFINE_PRIME7v (lime_vk_destroy_descriptor_set_layout);
 	DEFINE_PRIME6 (lime_vk_create_descriptor_pool);
 	DEFINE_PRIME7v (lime_vk_destroy_descriptor_pool);
+	DEFINE_PRIME8 (lime_vk_reset_descriptor_pool);
 	DEFINE_PRIME9 (lime_vk_allocate_descriptor_set);
 	DEFINE_PRIME14 (lime_vk_update_descriptor_set_image);
 	DEFINE_PRIME13 (lime_vk_update_descriptor_set_buffer);
 	DEFINE_PRIME8 (lime_vk_create_pipeline_layout);
 	DEFINE_PRIME7v (lime_vk_destroy_pipeline_layout);
-	DEFINE_PRIME5 (lime_vk_create_pipeline_cache);
+	DEFINE_PRIME8 (lime_vk_create_pipeline_cache);
 	DEFINE_PRIME7v (lime_vk_destroy_pipeline_cache);
+	DEFINE_PRIME8 (lime_vk_get_pipeline_cache_data);
 	DEFINE_PRIME14 (lime_vk_create_graphics_pipeline);
 	DEFINE_PRIME7v (lime_vk_destroy_pipeline);
 	DEFINE_PRIME10 (lime_vk_queue_submit_synced);
@@ -11852,6 +12655,7 @@ namespace lime {
 	DEFINE_PRIME7 (lime_vk_cmd_end_render_pass);
 	DEFINE_PRIME10 (lime_vk_cmd_bind_pipeline);
 	DEFINE_PRIME13 (lime_vk_cmd_bind_descriptor_set);
+	DEFINE_PRIME12 (lime_vk_cmd_bind_descriptor_set_ex);
 	DEFINE_PRIME12 (lime_vk_cmd_bind_vertex_buffer);
 	DEFINE_PRIME12 (lime_vk_cmd_bind_index_buffer);
 	DEFINE_PRIME13 (lime_vk_cmd_set_viewport);
@@ -11860,9 +12664,13 @@ namespace lime {
 	DEFINE_PRIME12 (lime_vk_cmd_draw_indexed);
 	DEFINE_PRIME12 (lime_vk_cmd_copy_buffer);
 	DEFINE_PRIME14 (lime_vk_cmd_copy_buffer_to_image);
+	DEFINE_PRIME12 (lime_vk_cmd_copy_buffer_to_image_region);
+	DEFINE_PRIME12 (lime_vk_cmd_copy_image_to_buffer_region);
 	DEFINE_PRIME10 (lime_vk_cmd_pipeline_barrier_image);
 	DEFINE_PRIME12 (lime_vk_cmd_clear_color_image);
+	DEFINE_PRIME11 (lime_vk_cmd_clear_depth_stencil_image);
 	DEFINE_PRIME12 (lime_vk_cmd_blit_image);
+	DEFINE_PRIME11 (lime_vk_cmd_push_constants);
 	DEFINE_PRIME0 (lime_vk_get_last_error);
 	DEFINE_PRIME2 (lime_vulkan_renderer_create);
 	DEFINE_PRIME1v (lime_vulkan_renderer_destroy);

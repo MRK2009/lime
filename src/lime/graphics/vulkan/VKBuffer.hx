@@ -120,4 +120,9 @@ class VKBuffer
 	{
 		return memory != null && memory.upload(bytes, memoryOffset, byteOffset, byteLength);
 	}
+
+	public function download(bytes:Bytes, memoryOffset:Int64 = null, byteOffset:Int = 0, byteLength:Int = -1):Bool
+	{
+		return memory != null && memory.download(bytes, memoryOffset, byteOffset, byteLength);
+	}
 }

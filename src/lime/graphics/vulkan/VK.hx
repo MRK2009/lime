@@ -59,6 +59,8 @@ class VK
 
 	public static inline var FENCE_CREATE_SIGNALED_BIT = 0x00000001;
 
+	public static inline var DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT = 0x00000001;
+
 	public static inline var FORMAT_UNDEFINED = 0;
 	public static inline var FORMAT_R8_UNORM = 9;
 	public static inline var FORMAT_R8G8_UNORM = 16;
@@ -121,6 +123,12 @@ class VK
 	public static inline var IMAGE_ASPECT_DEPTH_BIT = 0x00000002;
 	public static inline var IMAGE_ASPECT_STENCIL_BIT = 0x00000004;
 	public static inline var IMAGE_ASPECT_METADATA_BIT = 0x00000008;
+
+	public static inline var COLOR_COMPONENT_R_BIT = 0x00000001;
+	public static inline var COLOR_COMPONENT_G_BIT = 0x00000002;
+	public static inline var COLOR_COMPONENT_B_BIT = 0x00000004;
+	public static inline var COLOR_COMPONENT_A_BIT = 0x00000008;
+	public static inline var COLOR_COMPONENT_RGBA_BITS = COLOR_COMPONENT_R_BIT | COLOR_COMPONENT_G_BIT | COLOR_COMPONENT_B_BIT | COLOR_COMPONENT_A_BIT;
 
 	public static inline var IMAGE_LAYOUT_UNDEFINED = 0;
 	public static inline var IMAGE_LAYOUT_GENERAL = 1;

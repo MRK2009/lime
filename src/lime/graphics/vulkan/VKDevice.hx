@@ -308,13 +308,18 @@ class VKDevice
 		return null;
 	}
 
-	public function createPipelineCache():VKPipelineCache
+	public function createPipelineCache(bytes:Bytes = null, byteOffset:Int = 0, byteLength:Int = -1):VKPipelineCache
 	{
+		if (byteLength < 0 && bytes != null)
+		{
+			byteLength = bytes.length - byteOffset;
+		}
+
 		#if (!macro && lime_cffi && lime_vulkan)
 		if (isValid())
 		{
 			var data:Dynamic = NativeCFFI.lime_vk_create_pipeline_cache(instance.context.__windowHandle, instance.handle.high, instance.handle.low,
-				handle.high, handle.low);
+				handle.high, handle.low, bytes, byteOffset, byteLength);
 			var pipelineCacheHandle = VK.__makeHandle(data);
 			if (!VK.__isZero(pipelineCacheHandle))
 			{

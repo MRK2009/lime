@@ -82,4 +82,34 @@ class VKDeviceMemory
 
 		return false;
 	}
+
+	/**
+		Copies host-visible memory into a Haxe `Bytes` buffer. Use this after an
+		image-to-buffer transfer for render target and texture capture paths.
+	**/
+	public function download(bytes:Bytes, memoryOffset:Int64 = null, byteOffset:Int = 0, byteLength:Int = -1):Bool
+	{
+		if (memoryOffset == null)
+		{
+			memoryOffset = Int64.ofInt(0);
+		}
+		if (bytes == null)
+		{
+			return false;
+		}
+		if (byteLength < 0)
+		{
+			byteLength = bytes.length - byteOffset;
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			return NativeCFFI.lime_vk_download_memory(device.instance.context.__windowHandle, device.instance.handle.high, device.instance.handle.low,
+				device.handle.high, device.handle.low, handle.high, handle.low, memoryOffset.high, memoryOffset.low, bytes, byteOffset, byteLength);
+		}
+		#end
+
+		return false;
+	}
 }
