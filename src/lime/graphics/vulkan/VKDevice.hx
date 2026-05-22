@@ -368,15 +368,28 @@ class VKDevice
 			samples:Int = VK.SAMPLE_COUNT_1_BIT, colorLoadOp:Int = VK.ATTACHMENT_LOAD_OP_CLEAR,
 			colorStoreOp:Int = VK.ATTACHMENT_STORE_OP_STORE, colorInitialLayout:Int = VK.IMAGE_LAYOUT_UNDEFINED,
 			colorFinalLayout:Int = VK.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			depthLoadOp:Int = VK.ATTACHMENT_LOAD_OP_CLEAR, depthStoreOp:Int = VK.ATTACHMENT_STORE_OP_DONT_CARE,
-			depthFinalLayout:Int = VK.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL):VKRenderPass
+			depthInitialLayout:Int = VK.IMAGE_LAYOUT_UNDEFINED,
+			depthFinalLayout:Int = VK.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			depthLoadOp:Int = VK.ATTACHMENT_LOAD_OP_CLEAR, depthStoreOp:Int = VK.ATTACHMENT_STORE_OP_DONT_CARE):VKRenderPass
 	{
 		#if (!macro && lime_cffi && lime_vulkan)
 		if (isValid())
 		{
+			var state = [
+				colorFormat,
+				depthStencilFormat,
+				samples,
+				colorLoadOp,
+				colorStoreOp,
+				colorInitialLayout,
+				colorFinalLayout,
+				depthInitialLayout,
+				depthFinalLayout,
+				depthLoadOp,
+				depthStoreOp
+			];
 			var data:Dynamic = NativeCFFI.lime_vk_create_render_pass(instance.context.__windowHandle, instance.handle.high, instance.handle.low,
-				handle.high, handle.low, colorFormat, depthStencilFormat, samples, colorLoadOp, colorStoreOp, colorInitialLayout, colorFinalLayout,
-				depthLoadOp, depthStoreOp, depthFinalLayout);
+				handle.high, handle.low, state);
 			var renderPassHandle = VK.__makeHandle(data);
 			if (!VK.__isZero(renderPassHandle))
 			{

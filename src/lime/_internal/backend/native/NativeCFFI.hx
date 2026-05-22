@@ -478,8 +478,7 @@ class NativeCFFI
 		layerCount:Int):Dynamic;
 
 	@:cffi private static function lime_vk_create_render_pass(handle:Dynamic, instanceHigh:Int, instanceLow:Int, deviceHigh:Int, deviceLow:Int,
-		colorFormat:Int, depthStencilFormat:Int, samples:Int, colorLoadOp:Int, colorStoreOp:Int, colorInitialLayout:Int, colorFinalLayout:Int,
-		depthLoadOp:Int, depthStoreOp:Int, depthFinalLayout:Int):Dynamic;
+		state:Array<Int>):Dynamic;
 
 	@:cffi private static function lime_vk_destroy_render_pass(handle:Dynamic, instanceHigh:Int, instanceLow:Int, deviceHigh:Int, deviceLow:Int,
 		renderPassHigh:Int, renderPassLow:Int):Void;
@@ -589,10 +588,6 @@ class NativeCFFI
 
 	@:cffi private static function lime_vk_cmd_copy_buffer(handle:Dynamic, instanceHigh:Int, instanceLow:Int, deviceHigh:Int, deviceLow:Int,
 		commandBufferHigh:Int, commandBufferLow:Int, sourceHigh:Int, sourceLow:Int, destinationHigh:Int, destinationLow:Int, state:Array<Int>):Bool;
-
-	@:cffi private static function lime_vk_cmd_copy_buffer_to_image(handle:Dynamic, instanceHigh:Int, instanceLow:Int, deviceHigh:Int,
-		deviceLow:Int, commandBufferHigh:Int, commandBufferLow:Int, bufferHigh:Int, bufferLow:Int, imageHigh:Int, imageLow:Int, width:Int,
-		height:Int, layout:Int):Bool;
 
 	@:cffi private static function lime_vk_cmd_copy_buffer_to_image_region(handle:Dynamic, instanceHigh:Int, instanceLow:Int, deviceHigh:Int,
 		deviceLow:Int, commandBufferHigh:Int, commandBufferLow:Int, bufferHigh:Int, bufferLow:Int, imageHigh:Int, imageLow:Int,
@@ -1031,8 +1026,8 @@ class NativeCFFI
 		"lime_vk_destroy_image_view", "oiiiiiiv", false));
 	private static var lime_vk_create_image_view_ex = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->cpp.Object>(
 		cpp.Prime._loadPrime("lime", "lime_vk_create_image_view_ex", "oiiiiiiiiiiiiio", false));
-	private static var lime_vk_create_render_pass = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->cpp.Object>(
-		cpp.Prime._loadPrime("lime", "lime_vk_create_render_pass", "oiiiiiiiiiiiiiio", false));
+	private static var lime_vk_create_render_pass = new cpp.Callable<cpp.Object->Int->Int->Int->Int->cpp.Object->cpp.Object>(
+		cpp.Prime._loadPrime("lime", "lime_vk_create_render_pass", "oiiiioo", false));
 	private static var lime_vk_destroy_render_pass = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->cpp.Void>(cpp.Prime._loadPrime("lime",
 		"lime_vk_destroy_render_pass", "oiiiiiiv", false));
 	private static var lime_vk_create_framebuffer = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->cpp.Object->Int->Int->Int->cpp.Object>(
@@ -1103,8 +1098,6 @@ class NativeCFFI
 		"lime_vk_cmd_draw_indexed", "oiiiiiiiiiiib", false));
 	private static var lime_vk_cmd_copy_buffer = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->cpp.Object->Bool>(
 		cpp.Prime._loadPrime("lime", "lime_vk_cmd_copy_buffer", "oiiiiiiiiiiob", false));
-	private static var lime_vk_cmd_copy_buffer_to_image = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->Bool>(
-		cpp.Prime._loadPrime("lime", "lime_vk_cmd_copy_buffer_to_image", "oiiiiiiiiiiiiib", false));
 	private static var lime_vk_cmd_copy_buffer_to_image_region = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->cpp.Object->Bool>(
 		cpp.Prime._loadPrime("lime", "lime_vk_cmd_copy_buffer_to_image_region", "oiiiiiiiiiiob", false));
 	private static var lime_vk_cmd_copy_image_to_buffer_region = new cpp.Callable<cpp.Object->Int->Int->Int->Int->Int->Int->Int->Int->Int->Int->cpp.Object->Bool>(
@@ -1417,7 +1410,6 @@ class NativeCFFI
 	private static var lime_vk_cmd_draw = CFFI.load("lime", "lime_vk_cmd_draw", -1);
 	private static var lime_vk_cmd_draw_indexed = CFFI.load("lime", "lime_vk_cmd_draw_indexed", -1);
 	private static var lime_vk_cmd_copy_buffer = CFFI.load("lime", "lime_vk_cmd_copy_buffer", -1);
-	private static var lime_vk_cmd_copy_buffer_to_image = CFFI.load("lime", "lime_vk_cmd_copy_buffer_to_image", -1);
 	private static var lime_vk_cmd_copy_buffer_to_image_region = CFFI.load("lime", "lime_vk_cmd_copy_buffer_to_image_region", -1);
 	private static var lime_vk_cmd_copy_image_to_buffer_region = CFFI.load("lime", "lime_vk_cmd_copy_image_to_buffer_region", -1);
 	private static var lime_vk_cmd_pipeline_barrier_image = CFFI.load("lime", "lime_vk_cmd_pipeline_barrier_image", -1);
@@ -2315,8 +2307,7 @@ class NativeCFFI
 	}
 
 	@:hlNative("lime", "hl_vk_create_render_pass") private static function lime_vk_create_render_pass(handle:CFFIPointer, instanceHigh:Int,
-			instanceLow:Int, deviceHigh:Int, deviceLow:Int, colorFormat:Int, depthStencilFormat:Int, samples:Int, colorLoadOp:Int,
-			colorStoreOp:Int, colorInitialLayout:Int, colorFinalLayout:Int, depthLoadOp:Int, depthStoreOp:Int, depthFinalLayout:Int):Dynamic
+			instanceLow:Int, deviceHigh:Int, deviceLow:Int, state:hl.NativeArray<Int>):Dynamic
 	{
 		return null;
 	}
@@ -2519,13 +2510,6 @@ class NativeCFFI
 	@:hlNative("lime", "hl_vk_cmd_copy_buffer") private static function lime_vk_cmd_copy_buffer(handle:CFFIPointer, instanceHigh:Int,
 			instanceLow:Int, deviceHigh:Int, deviceLow:Int, commandBufferHigh:Int, commandBufferLow:Int, sourceHigh:Int, sourceLow:Int,
 			destinationHigh:Int, destinationLow:Int, state:hl.NativeArray<Int>):Bool
-	{
-		return false;
-	}
-
-	@:hlNative("lime", "hl_vk_cmd_copy_buffer_to_image") private static function lime_vk_cmd_copy_buffer_to_image(handle:CFFIPointer,
-			instanceHigh:Int, instanceLow:Int, deviceHigh:Int, deviceLow:Int, commandBufferHigh:Int, commandBufferLow:Int, bufferHigh:Int,
-			bufferLow:Int, imageHigh:Int, imageLow:Int, width:Int, height:Int, layout:Int):Bool
 	{
 		return false;
 	}
