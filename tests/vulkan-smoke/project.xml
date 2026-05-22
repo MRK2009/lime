@@ -5,6 +5,7 @@
 	<app main="Main" path="Export" file="LimeVulkanSmoke" />
 
 	<source path="Source" />
+	<assets path="Assets" />
 
 	<haxelib name="lime" />
 	<haxedef name="lime-vulkan" />
