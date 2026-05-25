@@ -60,6 +60,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -74,6 +75,28 @@ namespace lime {
 
 	static std::string lastVulkanRendererError;
 	static std::string lastVKError;
+
+
+	static void LogVulkanNativeBootstrap (const char* message) {
+
+#ifdef LIME_VULKAN
+		::FILE* file = ::fopen ("lime-vulkan-native.log", "a");
+		if (file) {
+
+			::fprintf (file, "%s\n", message ? message : "<null>");
+			::fclose (file);
+
+		}
+#endif
+
+	}
+
+
+	static void LogVulkanNativeBootstrap (const std::string& message) {
+
+		LogVulkanNativeBootstrap (message.c_str ());
+
+	}
 
 
 	static uint64_t CombineVulkanHandle (int high, int low) {
@@ -343,9 +366,11 @@ namespace lime {
 	static bool CreateManagedVulkanDevice (Window* targetWindow, VkInstance instance, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex,
 		const std::vector<std::string>& requestedExtensions, VkDevice* outDevice, VkQueue* outQueue) {
 
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: begin");
 		if (!targetWindow || !instance || !physicalDevice || !outDevice || !outQueue) {
 
 			lastVKError = "Missing Vulkan instance, physical device, or output device";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: missing input");
 			return false;
 
 		}
@@ -354,9 +379,11 @@ namespace lime {
 		*outQueue = VK_NULL_HANDLE;
 
 		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)targetWindow->GetVulkanInstanceProcAddr ();
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: acquired vkGetInstanceProcAddr");
 		if (!vkGetInstanceProcAddr) {
 
 			lastVKError = "SDL did not expose vkGetInstanceProcAddr";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: missing vkGetInstanceProcAddr");
 			return false;
 
 		}
@@ -367,19 +394,23 @@ namespace lime {
 			(PFN_vkEnumerateDeviceExtensionProperties)vkGetInstanceProcAddr (instance, "vkEnumerateDeviceExtensionProperties");
 		PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties =
 			(PFN_vkGetPhysicalDeviceQueueFamilyProperties)vkGetInstanceProcAddr (instance, "vkGetPhysicalDeviceQueueFamilyProperties");
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: loaded device creation procs");
 
 		if (!vkCreateDevice || !vkGetDeviceProcAddr || !vkEnumerateDeviceExtensionProperties || !vkGetPhysicalDeviceQueueFamilyProperties) {
 
 			lastVKError = "Missing required Vulkan device creation functions";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: missing required procs");
 			return false;
 
 		}
 
 		uint32_t queueFamilyCount = 0;
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: query queue family count");
 		vkGetPhysicalDeviceQueueFamilyProperties (physicalDevice, &queueFamilyCount, 0);
 		if (queueFamilyIndex >= queueFamilyCount) {
 
 			lastVKError = "Invalid Vulkan queue family index";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: invalid queue family index");
 			return false;
 
 		}
@@ -400,10 +431,12 @@ namespace lime {
 		}
 
 		uint32_t extensionCount = 0;
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: enumerate device extension count");
 		VkResult extensionResult = vkEnumerateDeviceExtensionProperties (physicalDevice, 0, &extensionCount, 0);
 		if (extensionResult != VK_SUCCESS) {
 
 			lastVKError = "Could not enumerate Vulkan device extensions";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: extension count enumeration failed");
 			return false;
 
 		}
@@ -411,10 +444,12 @@ namespace lime {
 		std::vector<VkExtensionProperties> availableExtensions (extensionCount);
 		if (extensionCount > 0) {
 
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: enumerate device extensions");
 			extensionResult = vkEnumerateDeviceExtensionProperties (physicalDevice, 0, &extensionCount, availableExtensions.data ());
 			if (extensionResult != VK_SUCCESS) {
 
 				lastVKError = "Could not enumerate Vulkan device extensions";
+				LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: extension enumeration failed");
 				return false;
 
 			}
@@ -444,6 +479,7 @@ namespace lime {
 			if (!extensionSupported) {
 
 				lastVKError = std::string ("Vulkan physical device does not support ") + requestedExtensions[i];
+				LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: requested extension missing");
 				return false;
 
 			}
@@ -490,24 +526,29 @@ namespace lime {
 		createInfo.ppEnabledExtensionNames = deviceExtensions.empty () ? 0 : deviceExtensions.data ();
 
 		VkResult result = vkCreateDevice (physicalDevice, &createInfo, 0, outDevice);
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: returned from vkCreateDevice");
 		if (result != VK_SUCCESS) {
 
 			lastVKError = "vkCreateDevice failed";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: vkCreateDevice failed");
 			return false;
 
 		}
 
 		PFN_vkGetDeviceQueue vkGetDeviceQueue = (PFN_vkGetDeviceQueue)vkGetDeviceProcAddr (*outDevice, "vkGetDeviceQueue");
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: loaded vkGetDeviceQueue");
 		if (!vkGetDeviceQueue) {
 
 			PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (*outDevice, "vkDestroyDevice");
 			if (vkDestroyDevice) vkDestroyDevice (*outDevice, 0);
 			*outDevice = VK_NULL_HANDLE;
 			lastVKError = "Missing Vulkan device queue function";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: missing vkGetDeviceQueue");
 			return false;
 
 		}
 
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: get device queue");
 		vkGetDeviceQueue (*outDevice, queueFamilyIndex, 0, outQueue);
 		if (!*outQueue) {
 
@@ -515,11 +556,13 @@ namespace lime {
 			if (vkDestroyDevice) vkDestroyDevice (*outDevice, 0);
 			*outDevice = VK_NULL_HANDLE;
 			lastVKError = "Failed to get Vulkan device queue";
+			LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: device queue was null");
 			return false;
 
 		}
 
 		lastVKError.clear ();
+		LogVulkanNativeBootstrap ("CreateManagedVulkanDevice: success");
 		return true;
 
 	}
@@ -5097,23 +5140,36 @@ namespace lime {
 		value extensions) {
 
 #ifdef LIME_VULKAN
+		LogVulkanNativeBootstrap ("lime_vk_create_device: begin");
+		if (val_is_null (window)) {
+
+			lastVKError = "Missing Lime window for Vulkan device creation";
+			LogVulkanNativeBootstrap ("lime_vk_create_device: null window");
+			return alloc_null ();
+
+		}
 		Window* targetWindow = (Window*)val_data (window);
 		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
 		VkPhysicalDevice physicalDevice = (VkPhysicalDevice)(uintptr_t)CombineVulkanHandle (physicalDeviceHigh, physicalDeviceLow);
+		LogVulkanNativeBootstrap ("lime_vk_create_device: decoded handles");
 		std::vector<std::string> deviceExtensions = GetVulkanDeviceExtensions (extensions);
+		LogVulkanNativeBootstrap ("lime_vk_create_device: decoded extensions");
 		VkDevice device = VK_NULL_HANDLE;
 		VkQueue queue = VK_NULL_HANDLE;
 
 		if (!CreateManagedVulkanDevice (targetWindow, instance, physicalDevice, queueFamilyIndex, deviceExtensions, &device, &queue)) {
 
+			LogVulkanNativeBootstrap ("lime_vk_create_device: CreateManagedVulkanDevice failed");
 			return alloc_null ();
 
 		}
 
+		LogVulkanNativeBootstrap ("lime_vk_create_device: create result object");
 		value result = alloc_empty_object ();
 		alloc_field (result, val_id ("handle"), CreateVulkanHandleValue ((uint64_t)(uintptr_t)device));
 		alloc_field (result, val_id ("queue"), CreateVulkanHandleValue ((uint64_t)(uintptr_t)queue));
 		alloc_field (result, val_id ("queueFamilyIndex"), alloc_int (queueFamilyIndex));
+		LogVulkanNativeBootstrap ("lime_vk_create_device: success");
 		return result;
 #else
 		lastVKError = "Lime was built without lime-vulkan support";
@@ -6223,7 +6279,9 @@ namespace lime {
 		VkResult result = vkQueueSubmit (queue, 1, &submitInfo, fence);
 		if (result != VK_SUCCESS) {
 
-			lastVKError = "vkQueueSubmit failed";
+			char error[64];
+			::snprintf (error, sizeof (error), "vkQueueSubmit failed: %d", (int)result);
+			lastVKError = error;
 			return false;
 
 		}
@@ -6260,7 +6318,9 @@ namespace lime {
 		VkResult result = vkQueueSubmit (queue, 1, &submitInfo, fence);
 		if (result != VK_SUCCESS) {
 
-			lastVKError = "vkQueueSubmit failed";
+			char error[64];
+			::snprintf (error, sizeof (error), "vkQueueSubmit failed: %d", (int)result);
+			lastVKError = error;
 			return false;
 
 		}
@@ -9794,7 +9854,9 @@ namespace lime {
 		VkResult result = vkQueueSubmit (queue, 1, &submitInfo, fence);
 		if (result != VK_SUCCESS) {
 
-			lastVKError = "vkQueueSubmit failed";
+			char error[64];
+			::snprintf (error, sizeof (error), "vkQueueSubmit failed: %d", (int)result);
+			lastVKError = error;
 			return false;
 
 		}
@@ -9842,7 +9904,9 @@ namespace lime {
 		VkResult result = vkQueueSubmit (queue, 1, &submitInfo, fence);
 		if (result != VK_SUCCESS) {
 
-			lastVKError = "vkQueueSubmit failed";
+			char error[64];
+			::snprintf (error, sizeof (error), "vkQueueSubmit failed: %d", (int)result);
+			lastVKError = error;
 			return false;
 
 		}
