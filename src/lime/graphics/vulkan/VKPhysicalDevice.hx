@@ -23,6 +23,10 @@ class VKPhysicalDevice
 	public var deviceID(default, null):Int;
 	public var deviceType(default, null):Int;
 	public var deviceTypeName(default, null):String;
+	public var framebufferColorSampleCounts(default, null):Int;
+	public var framebufferDepthSampleCounts(default, null):Int;
+	public var framebufferNoAttachmentsSampleCounts(default, null):Int;
+	public var framebufferStencilSampleCounts(default, null):Int;
 	public var isDiscrete(default, null):Bool;
 	public var supportsPresent(default, null):Bool;
 	public var queueFamilies(default, null):Array<VKQueueFamilyInfo>;
@@ -39,6 +43,10 @@ class VKPhysicalDevice
 		vendorID = data.vendorID;
 		deviceID = data.deviceID;
 		deviceType = data.deviceType;
+		framebufferColorSampleCounts = data.framebufferColorSampleCounts;
+		framebufferDepthSampleCounts = data.framebufferDepthSampleCounts;
+		framebufferNoAttachmentsSampleCounts = data.framebufferNoAttachmentsSampleCounts;
+		framebufferStencilSampleCounts = data.framebufferStencilSampleCounts;
 		deviceTypeName = switch (deviceType)
 		{
 			case 1: "integrated-gpu";
@@ -122,5 +130,43 @@ class VKPhysicalDevice
 		requireTransfer:Bool = false):Bool
 	{
 		return getQueueFamily(requireGraphics, requirePresent, requireCompute, requireTransfer) != null;
+	}
+
+	public function getMaxUsableSampleCount(requireDepth:Bool = false, requireStencil:Bool = false):Int
+	{
+		var counts = framebufferColorSampleCounts;
+		if (requireDepth)
+		{
+			counts &= framebufferDepthSampleCounts;
+		}
+		if (requireStencil)
+		{
+			counts &= framebufferStencilSampleCounts;
+		}
+
+		for (sampleCount in [VK.SAMPLE_COUNT_64_BIT, VK.SAMPLE_COUNT_32_BIT, VK.SAMPLE_COUNT_16_BIT, VK.SAMPLE_COUNT_8_BIT,
+			VK.SAMPLE_COUNT_4_BIT, VK.SAMPLE_COUNT_2_BIT])
+		{
+			if ((counts & sampleCount) != 0)
+			{
+				return sampleCount;
+			}
+		}
+
+		return VK.SAMPLE_COUNT_1_BIT;
+	}
+
+	public function supportsSampleCount(samples:Int, requireDepth:Bool = false, requireStencil:Bool = false):Bool
+	{
+		var counts = framebufferColorSampleCounts;
+		if (requireDepth)
+		{
+			counts &= framebufferDepthSampleCounts;
+		}
+		if (requireStencil)
+		{
+			counts &= framebufferStencilSampleCounts;
+		}
+		return (counts & samples) != 0;
 	}
 }

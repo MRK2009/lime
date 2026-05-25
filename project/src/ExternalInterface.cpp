@@ -4914,6 +4914,10 @@ namespace lime {
 		const int id_vendorID = val_id ("vendorID");
 		const int id_deviceID = val_id ("deviceID");
 		const int id_deviceType = val_id ("deviceType");
+		const int id_framebufferColorSampleCounts = val_id ("framebufferColorSampleCounts");
+		const int id_framebufferDepthSampleCounts = val_id ("framebufferDepthSampleCounts");
+		const int id_framebufferNoAttachmentsSampleCounts = val_id ("framebufferNoAttachmentsSampleCounts");
+		const int id_framebufferStencilSampleCounts = val_id ("framebufferStencilSampleCounts");
 		const int id_queueFamilies = val_id ("queueFamilies");
 
 		const int id_index = val_id ("index");
@@ -4972,6 +4976,10 @@ namespace lime {
 			alloc_field (deviceObject, id_vendorID, alloc_int (properties.vendorID));
 			alloc_field (deviceObject, id_deviceID, alloc_int (properties.deviceID));
 			alloc_field (deviceObject, id_deviceType, alloc_int (properties.deviceType));
+			alloc_field (deviceObject, id_framebufferColorSampleCounts, alloc_int ((int)properties.limits.framebufferColorSampleCounts));
+			alloc_field (deviceObject, id_framebufferDepthSampleCounts, alloc_int ((int)properties.limits.framebufferDepthSampleCounts));
+			alloc_field (deviceObject, id_framebufferNoAttachmentsSampleCounts, alloc_int ((int)properties.limits.framebufferNoAttachmentsSampleCounts));
+			alloc_field (deviceObject, id_framebufferStencilSampleCounts, alloc_int ((int)properties.limits.framebufferStencilSampleCounts));
 			alloc_field (deviceObject, id_queueFamilies, queueFamilyArray);
 			val_array_set_i (devices, i, deviceObject);
 
@@ -5062,6 +5070,10 @@ namespace lime {
 		const int id_vendorID = hl_hash_utf8 ("vendorID");
 		const int id_deviceID = hl_hash_utf8 ("deviceID");
 		const int id_deviceType = hl_hash_utf8 ("deviceType");
+		const int id_framebufferColorSampleCounts = hl_hash_utf8 ("framebufferColorSampleCounts");
+		const int id_framebufferDepthSampleCounts = hl_hash_utf8 ("framebufferDepthSampleCounts");
+		const int id_framebufferNoAttachmentsSampleCounts = hl_hash_utf8 ("framebufferNoAttachmentsSampleCounts");
+		const int id_framebufferStencilSampleCounts = hl_hash_utf8 ("framebufferStencilSampleCounts");
 		const int id_queueFamilies = hl_hash_utf8 ("queueFamilies");
 
 		const int id_index = hl_hash_utf8 ("index");
@@ -5122,6 +5134,10 @@ namespace lime {
 			hl_dyn_seti (deviceObject, id_vendorID, &hlt_i32, properties.vendorID);
 			hl_dyn_seti (deviceObject, id_deviceID, &hlt_i32, properties.deviceID);
 			hl_dyn_seti (deviceObject, id_deviceType, &hlt_i32, properties.deviceType);
+			hl_dyn_seti (deviceObject, id_framebufferColorSampleCounts, &hlt_i32, properties.limits.framebufferColorSampleCounts);
+			hl_dyn_seti (deviceObject, id_framebufferDepthSampleCounts, &hlt_i32, properties.limits.framebufferDepthSampleCounts);
+			hl_dyn_seti (deviceObject, id_framebufferNoAttachmentsSampleCounts, &hlt_i32, properties.limits.framebufferNoAttachmentsSampleCounts);
+			hl_dyn_seti (deviceObject, id_framebufferStencilSampleCounts, &hlt_i32, properties.limits.framebufferStencilSampleCounts);
 			hl_dyn_setp (deviceObject, id_queueFamilies, &hlt_array, queueFamilyArray);
 
 		}
@@ -7760,7 +7776,7 @@ namespace lime {
 			"vkCreateRenderPass");
 		if (!vkCreateRenderPass) return alloc_null ();
 		std::vector<int> packed = GetVulkanIntVector (state);
-		if (packed.size () < 11) return alloc_null ();
+		if (packed.size () < 16) return alloc_null ();
 
 		int colorFormat = packed[0];
 		int depthStencilFormat = packed[1];
@@ -7773,6 +7789,11 @@ namespace lime {
 		int depthFinalLayout = packed[8];
 		int depthLoadOp = packed[9];
 		int depthStoreOp = packed[10];
+		int resolveFormat = packed[11];
+		int resolveLoadOp = packed[12];
+		int resolveStoreOp = packed[13];
+		int resolveInitialLayout = packed[14];
+		int resolveFinalLayout = packed[15];
 
 		std::vector<VkAttachmentDescription> attachments;
 		VkAttachmentDescription colorAttachment;
@@ -7795,6 +7816,7 @@ namespace lime {
 		VkAttachmentReference depthReference;
 		memset (&depthReference, 0, sizeof (depthReference));
 		bool hasDepth = depthStencilFormat != VK_FORMAT_UNDEFINED;
+		bool hasResolve = resolveFormat != VK_FORMAT_UNDEFINED;
 		if (hasDepth) {
 
 			VkAttachmentDescription depthAttachment;
@@ -7813,11 +7835,32 @@ namespace lime {
 
 		}
 
+		VkAttachmentReference resolveReference;
+		memset (&resolveReference, 0, sizeof (resolveReference));
+		if (hasResolve) {
+
+			VkAttachmentDescription resolveAttachment;
+			memset (&resolveAttachment, 0, sizeof (resolveAttachment));
+			resolveAttachment.format = (VkFormat)resolveFormat;
+			resolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			resolveAttachment.loadOp = (VkAttachmentLoadOp)resolveLoadOp;
+			resolveAttachment.storeOp = (VkAttachmentStoreOp)resolveStoreOp;
+			resolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			resolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			resolveAttachment.initialLayout = (VkImageLayout)resolveInitialLayout;
+			resolveAttachment.finalLayout = (VkImageLayout)resolveFinalLayout;
+			attachments.push_back (resolveAttachment);
+			resolveReference.attachment = (uint32_t)(attachments.size () - 1);
+			resolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		}
+
 		VkSubpassDescription subpass;
 		memset (&subpass, 0, sizeof (subpass));
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorReference;
+		subpass.pResolveAttachments = hasResolve ? &resolveReference : 0;
 		subpass.pDepthStencilAttachment = hasDepth ? &depthReference : 0;
 
 		VkSubpassDependency dependency;
@@ -7868,7 +7911,7 @@ namespace lime {
 			"vkCreateRenderPass");
 		if (!vkCreateRenderPass) return 0;
 		std::vector<int> packed = GetHLVulkanIntVector (state);
-		if (packed.size () < 11) return 0;
+		if (packed.size () < 16) return 0;
 
 		int colorFormat = packed[0];
 		int depthStencilFormat = packed[1];
@@ -7881,6 +7924,11 @@ namespace lime {
 		int depthFinalLayout = packed[8];
 		int depthLoadOp = packed[9];
 		int depthStoreOp = packed[10];
+		int resolveFormat = packed[11];
+		int resolveLoadOp = packed[12];
+		int resolveStoreOp = packed[13];
+		int resolveInitialLayout = packed[14];
+		int resolveFinalLayout = packed[15];
 
 		std::vector<VkAttachmentDescription> attachments;
 		VkAttachmentDescription colorAttachment;
@@ -7903,6 +7951,7 @@ namespace lime {
 		VkAttachmentReference depthReference;
 		memset (&depthReference, 0, sizeof (depthReference));
 		bool hasDepth = depthStencilFormat != VK_FORMAT_UNDEFINED;
+		bool hasResolve = resolveFormat != VK_FORMAT_UNDEFINED;
 		if (hasDepth) {
 
 			VkAttachmentDescription depthAttachment;
@@ -7921,11 +7970,32 @@ namespace lime {
 
 		}
 
+		VkAttachmentReference resolveReference;
+		memset (&resolveReference, 0, sizeof (resolveReference));
+		if (hasResolve) {
+
+			VkAttachmentDescription resolveAttachment;
+			memset (&resolveAttachment, 0, sizeof (resolveAttachment));
+			resolveAttachment.format = (VkFormat)resolveFormat;
+			resolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+			resolveAttachment.loadOp = (VkAttachmentLoadOp)resolveLoadOp;
+			resolveAttachment.storeOp = (VkAttachmentStoreOp)resolveStoreOp;
+			resolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			resolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			resolveAttachment.initialLayout = (VkImageLayout)resolveInitialLayout;
+			resolveAttachment.finalLayout = (VkImageLayout)resolveFinalLayout;
+			attachments.push_back (resolveAttachment);
+			resolveReference.attachment = (uint32_t)(attachments.size () - 1);
+			resolveReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		}
+
 		VkSubpassDescription subpass;
 		memset (&subpass, 0, sizeof (subpass));
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorReference;
+		subpass.pResolveAttachments = hasResolve ? &resolveReference : 0;
 		subpass.pDepthStencilAttachment = hasDepth ? &depthReference : 0;
 
 		VkSubpassDependency dependency;
@@ -9492,7 +9562,7 @@ namespace lime {
 	static VkPipeline CreateManagedVulkanGraphicsPipeline (Window* targetWindow, VkInstance instance, VkDevice device, VkRenderPass renderPass,
 		VkPipelineLayout layout, VkShaderModule vertexShader, VkShaderModule fragmentShader, const std::vector<int>& state) {
 
-		if (state.size () < 35 || !renderPass || !layout || !vertexShader || !fragmentShader) {
+		if (state.size () < 41 || !renderPass || !layout || !vertexShader || !fragmentShader) {
 
 			lastVKError = "Invalid Vulkan graphics pipeline state";
 			return VK_NULL_HANDLE;
@@ -9534,6 +9604,12 @@ namespace lime {
 		int backCompareMask = state[cursor++];
 		int backWriteMask = state[cursor++];
 		int backReference = state[cursor++];
+		int rasterizationSamples = state[cursor++];
+		bool sampleShading = state[cursor++] != 0;
+		int minSampleShading = state[cursor++];
+		int sampleMask = state[cursor++];
+		bool alphaToCoverage = state[cursor++] != 0;
+		bool alphaToOne = state[cursor++] != 0;
 		int bindingCount = state[cursor++];
 
 		if ((int)state.size () < cursor + bindingCount * 3 + 1) {
@@ -9635,7 +9711,13 @@ namespace lime {
 		VkPipelineMultisampleStateCreateInfo multisample;
 		memset (&multisample, 0, sizeof (multisample));
 		multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-		multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+		multisample.rasterizationSamples = (VkSampleCountFlagBits)rasterizationSamples;
+		multisample.sampleShadingEnable = sampleShading ? VK_TRUE : VK_FALSE;
+		multisample.minSampleShading = (float)minSampleShading / 1000000.0f;
+		VkSampleMask sampleMaskValue = (VkSampleMask)sampleMask;
+		multisample.pSampleMask = sampleMask != 0 ? &sampleMaskValue : 0;
+		multisample.alphaToCoverageEnable = alphaToCoverage ? VK_TRUE : VK_FALSE;
+		multisample.alphaToOneEnable = alphaToOne ? VK_TRUE : VK_FALSE;
 
 		VkPipelineDepthStencilStateCreateInfo depthStencil;
 		memset (&depthStencil, 0, sizeof (depthStencil));

@@ -43,7 +43,10 @@ class Main extends Application
 	private static inline var DEPTH_FORMAT = VK.FORMAT_D32_SFLOAT;
 	private static inline var OFFSCREEN_FORMAT = VK.FORMAT_R8G8B8A8_UNORM;
 	private static inline var OFFSCREEN_SIZE = 256;
+	private static inline var REQUESTED_MSAA_SAMPLES = VK.SAMPLE_COUNT_4_BIT;
 
+	private var colorImage:VKImage;
+	private var colorView:VKImageView;
 	private var commandBuffer:VKCommandBuffer;
 	private var commandPool:VKCommandPool;
 	private var cubeDescriptorSet:VKDescriptorSet;
@@ -82,6 +85,7 @@ class Main extends Application
 	private var queueFamily:VKQueueFamilyInfo;
 	private var renderFinished:VKSemaphore;
 	private var renderPass:VKRenderPass;
+	private var msaaSamples:Int = VK.SAMPLE_COUNT_1_BIT;
 	private var sourceTextureImage:VKImage;
 	private var sourceTextureSampler:VKSampler;
 	private var sourceTextureView:VKImageView;
@@ -187,6 +191,7 @@ class Main extends Application
 			fail("No present-capable graphics queue family was found");
 			return;
 		}
+		msaaSamples = physicalDevice.supportsSampleCount(REQUESTED_MSAA_SAMPLES, true) ? REQUESTED_MSAA_SAMPLES : VK.SAMPLE_COUNT_1_BIT;
 
 		queueFamily = physicalDevice.getQueueFamily(true, true);
 		device = physicalDevice.createDevice(queueFamily);
@@ -485,9 +490,22 @@ class Main extends Application
 
 	private function createOnscreenPass():Bool
 	{
-		renderPass = device.createRenderPass(swapchain.format, DEPTH_FORMAT, VK.SAMPLE_COUNT_1_BIT,
-			VK.ATTACHMENT_LOAD_OP_CLEAR, VK.ATTACHMENT_STORE_OP_STORE, VK.IMAGE_LAYOUT_UNDEFINED, VK.IMAGE_LAYOUT_PRESENT_SRC_KHR);
-		if (renderPass == null || !createDepthResources() || !createFramebuffers())
+		if (msaaSamples != VK.SAMPLE_COUNT_1_BIT)
+		{
+			renderPass = device.createRenderPass(swapchain.format, DEPTH_FORMAT, msaaSamples,
+				VK.ATTACHMENT_LOAD_OP_CLEAR, VK.ATTACHMENT_STORE_OP_DONT_CARE, VK.IMAGE_LAYOUT_UNDEFINED,
+				VK.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK.IMAGE_LAYOUT_UNDEFINED,
+				VK.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, VK.ATTACHMENT_LOAD_OP_CLEAR,
+				VK.ATTACHMENT_STORE_OP_DONT_CARE, swapchain.format, VK.ATTACHMENT_LOAD_OP_DONT_CARE,
+				VK.ATTACHMENT_STORE_OP_STORE, VK.IMAGE_LAYOUT_UNDEFINED, VK.IMAGE_LAYOUT_PRESENT_SRC_KHR);
+		}
+		else
+		{
+			renderPass = device.createRenderPass(swapchain.format, DEPTH_FORMAT, VK.SAMPLE_COUNT_1_BIT,
+				VK.ATTACHMENT_LOAD_OP_CLEAR, VK.ATTACHMENT_STORE_OP_STORE, VK.IMAGE_LAYOUT_UNDEFINED, VK.IMAGE_LAYOUT_PRESENT_SRC_KHR);
+		}
+
+		if (renderPass == null || !createColorResources() || !createDepthResources() || !createFramebuffers())
 		{
 			fail("Failed to create Vulkan onscreen render pass resources: " + VK.getLastError());
 			return false;
@@ -511,6 +529,7 @@ class Main extends Application
 		info.depthCompareOp = VK.COMPARE_OP_LESS;
 		info.cullMode = VK.CULL_MODE_BACK_BIT;
 		info.frontFace = VK.FRONT_FACE_CLOCKWISE;
+		info.rasterizationSamples = msaaSamples;
 		info.vertexBindings.push(new VKVertexBinding(0, 36, VK.VERTEX_INPUT_RATE_VERTEX));
 		info.vertexAttributes.push(new VKVertexAttribute(0, 0, VK.FORMAT_R32G32B32_SFLOAT, 0));
 		info.vertexAttributes.push(new VKVertexAttribute(1, 0, VK.FORMAT_R32G32_SFLOAT, 12));
@@ -526,11 +545,33 @@ class Main extends Application
 		return true;
 	}
 
+	private function createColorResources():Bool
+	{
+		disposeColorResources();
+
+		if (msaaSamples == VK.SAMPLE_COUNT_1_BIT)
+		{
+			return true;
+		}
+
+		colorImage = device.createImage(swapchain.width, swapchain.height, swapchain.format,
+			VK.IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK.IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT, 1, 1, 1, VK.IMAGE_TYPE_2D,
+			VK.IMAGE_TILING_OPTIMAL, msaaSamples);
+		if (colorImage == null || colorImage.allocateMemory(VK.MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == null)
+		{
+			return false;
+		}
+
+		colorView = colorImage.createView(swapchain.format);
+		return colorView != null;
+	}
+
 	private function createDepthResources():Bool
 	{
 		disposeDepthResources();
 
-		depthImage = device.createImage(swapchain.width, swapchain.height, DEPTH_FORMAT, VK.IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+		depthImage = device.createImage(swapchain.width, swapchain.height, DEPTH_FORMAT, VK.IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+			1, 1, 1, VK.IMAGE_TYPE_2D, VK.IMAGE_TILING_OPTIMAL, msaaSamples);
 		if (depthImage == null || depthImage.allocateMemory(VK.MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == null)
 		{
 			return false;
@@ -553,7 +594,8 @@ class Main extends Application
 				return false;
 			}
 
-			var framebuffer = device.createFramebuffer(renderPass, [imageView, depthView], swapchain.width, swapchain.height);
+			var attachments = msaaSamples != VK.SAMPLE_COUNT_1_BIT ? [colorView, depthView, imageView] : [imageView, depthView];
+			var framebuffer = device.createFramebuffer(renderPass, attachments, swapchain.width, swapchain.height);
 			if (framebuffer == null)
 			{
 				imageView.dispose();
@@ -692,12 +734,13 @@ class Main extends Application
 			return false;
 		}
 
-		return createDepthResources() && createFramebuffers();
+		return createColorResources() && createDepthResources() && createFramebuffers();
 	}
 
 	private function disposeSwapchainResources():Void
 	{
 		disposeSwapchainFramebuffers();
+		disposeColorResources();
 		disposeDepthResources();
 	}
 
@@ -720,6 +763,20 @@ class Main extends Application
 			}
 		}
 		imageViews = [];
+	}
+
+	private function disposeColorResources():Void
+	{
+		if (colorView != null)
+		{
+			colorView.dispose();
+			colorView = null;
+		}
+		if (colorImage != null)
+		{
+			colorImage.dispose(true);
+			colorImage = null;
+		}
 	}
 
 	private function disposeDepthResources():Void
@@ -792,6 +849,8 @@ class Main extends Application
 
 		commandBuffer = null;
 		commandPool = null;
+		colorImage = null;
+		colorView = null;
 		cubeDescriptorSet = null;
 		cubeDescriptorSetLayout = null;
 		cubeFragmentShader = null;

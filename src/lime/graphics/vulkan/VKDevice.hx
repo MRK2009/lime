@@ -370,7 +370,10 @@ class VKDevice
 			colorFinalLayout:Int = VK.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			depthInitialLayout:Int = VK.IMAGE_LAYOUT_UNDEFINED,
 			depthFinalLayout:Int = VK.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-			depthLoadOp:Int = VK.ATTACHMENT_LOAD_OP_CLEAR, depthStoreOp:Int = VK.ATTACHMENT_STORE_OP_DONT_CARE):VKRenderPass
+			depthLoadOp:Int = VK.ATTACHMENT_LOAD_OP_CLEAR, depthStoreOp:Int = VK.ATTACHMENT_STORE_OP_DONT_CARE,
+			resolveFormat:Int = VK.FORMAT_UNDEFINED, resolveLoadOp:Int = VK.ATTACHMENT_LOAD_OP_DONT_CARE,
+			resolveStoreOp:Int = VK.ATTACHMENT_STORE_OP_STORE, resolveInitialLayout:Int = VK.IMAGE_LAYOUT_UNDEFINED,
+			resolveFinalLayout:Int = VK.IMAGE_LAYOUT_PRESENT_SRC_KHR):VKRenderPass
 	{
 		#if (!macro && lime_cffi && lime_vulkan)
 		if (isValid())
@@ -386,14 +389,19 @@ class VKDevice
 				depthInitialLayout,
 				depthFinalLayout,
 				depthLoadOp,
-				depthStoreOp
+				depthStoreOp,
+				resolveFormat,
+				resolveLoadOp,
+				resolveStoreOp,
+				resolveInitialLayout,
+				resolveFinalLayout
 			];
 			var data:Dynamic = NativeCFFI.lime_vk_create_render_pass(instance.context.__windowHandle, instance.handle.high, instance.handle.low,
 				handle.high, handle.low, state);
 			var renderPassHandle = VK.__makeHandle(data);
 			if (!VK.__isZero(renderPassHandle))
 			{
-				return new VKRenderPass(this, renderPassHandle, colorFormat, depthStencilFormat, samples);
+				return new VKRenderPass(this, renderPassHandle, colorFormat, depthStencilFormat, samples, resolveFormat);
 			}
 		}
 		#end

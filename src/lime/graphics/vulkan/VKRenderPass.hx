@@ -14,16 +14,20 @@ class VKRenderPass
 	public var depthStencilFormat(default, null):Int;
 	public var device(default, null):VKDevice;
 	public var handle(default, null):Int64;
+	public var hasResolve(default, null):Bool;
+	public var resolveFormat(default, null):Int;
 	public var samples(default, null):Int;
 
 	@:allow(lime.graphics.vulkan.VKDevice)
-	private function new(device:VKDevice, handle:Int64, colorFormat:Int, depthStencilFormat:Int, samples:Int)
+	private function new(device:VKDevice, handle:Int64, colorFormat:Int, depthStencilFormat:Int, samples:Int, resolveFormat:Int)
 	{
 		this.device = device;
 		this.handle = handle;
 		this.colorFormat = colorFormat;
 		this.depthStencilFormat = depthStencilFormat;
 		this.samples = samples;
+		this.resolveFormat = resolveFormat;
+		this.hasResolve = resolveFormat != VK.FORMAT_UNDEFINED;
 	}
 
 	public function dispose():Void

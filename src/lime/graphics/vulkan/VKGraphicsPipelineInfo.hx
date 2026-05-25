@@ -29,6 +29,12 @@ class VKGraphicsPipelineInfo
 	public var frontWriteMask:Int = -1;
 	public var polygonMode:Int = VK.POLYGON_MODE_FILL;
 	public var primitiveRestart:Bool = false;
+	public var rasterizationSamples:Int = VK.SAMPLE_COUNT_1_BIT;
+	public var sampleShading:Bool = false;
+	public var minSampleShading:Float = 0;
+	public var sampleMask:Int = 0;
+	public var alphaToCoverage:Bool = false;
+	public var alphaToOne:Bool = false;
 	public var srcAlphaBlendFactor:Int = VK.BLEND_FACTOR_ONE;
 	public var srcColorBlendFactor:Int = VK.BLEND_FACTOR_SRC_ALPHA;
 	public var stencilTest:Bool = false;
@@ -85,6 +91,12 @@ class VKGraphicsPipelineInfo
 			backCompareMask,
 			backWriteMask,
 			backReference,
+			rasterizationSamples,
+			sampleShading ? 1 : 0,
+			Std.int(minSampleShading * 1000000),
+			sampleMask,
+			alphaToCoverage ? 1 : 0,
+			alphaToOne ? 1 : 0,
 			vertexBindings.length
 		];
 
