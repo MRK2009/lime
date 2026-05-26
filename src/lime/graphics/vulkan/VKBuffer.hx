@@ -116,6 +116,34 @@ class VKBuffer
 		return !VK.__isZero(handle);
 	}
 
+	public function map(offset:Int64 = null, size:Int64 = null, flags:Int = 0):Bool
+	{
+		return memory != null && memory.map(offset, size, flags);
+	}
+
+	public function unmap():Void
+	{
+		if (memory != null)
+		{
+			memory.unmap();
+		}
+	}
+
+	public function writeBytes(bytes:Bytes, srcOffset:Int = 0, length:Int = -1, dstOffset:Int64 = null):Bool
+	{
+		return memory != null && memory.writeBytes(bytes, srcOffset, length, dstOffset);
+	}
+
+	public function flush(offset:Int64 = null, size:Int64 = null):Bool
+	{
+		return memory != null && memory.flush(offset, size);
+	}
+
+	public function invalidate(offset:Int64 = null, size:Int64 = null):Bool
+	{
+		return memory != null && memory.invalidate(offset, size);
+	}
+
 	public function upload(bytes:Bytes, memoryOffset:Int64 = null, byteOffset:Int = 0, byteLength:Int = -1):Bool
 	{
 		return memory != null && memory.upload(bytes, memoryOffset, byteOffset, byteLength);

@@ -151,6 +151,12 @@ class VKDevice
 			VK.MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK.MEMORY_PROPERTY_HOST_COHERENT_BIT, bytes);
 	}
 
+	public inline function createUploadRing(byteCapacity:Int, usage:Int = VK.BUFFER_USAGE_TRANSFER_SRC_BIT,
+			properties:Int = VK.MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK.MEMORY_PROPERTY_HOST_COHERENT_BIT):VKUploadRing
+	{
+		return new VKUploadRing(this, byteCapacity, usage, properties);
+	}
+
 	public inline function createStorageBuffer(size:Int64, properties:Int, bytes:Bytes = null):VKBuffer
 	{
 		return createBufferWithMemory(size, VK.BUFFER_USAGE_STORAGE_BUFFER_BIT, properties, bytes);
@@ -222,6 +228,33 @@ class VKDevice
 		#end
 
 		return null;
+	}
+
+	public function updateDescriptorSets(writes:Array<VKDescriptorWrite>):Bool
+	{
+		if (writes == null || writes.length == 0)
+		{
+			return true;
+		}
+
+		var packed = [writes.length];
+		for (write in writes)
+		{
+			if (write == null || !write.pack(packed))
+			{
+				return false;
+			}
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid())
+		{
+			return NativeCFFI.lime_vk_update_descriptor_sets(instance.context.__windowHandle, instance.handle.high, instance.handle.low, handle.high,
+				handle.low, packed);
+		}
+		#end
+
+		return false;
 	}
 
 	public function createFramebuffer(renderPass:VKRenderPass, attachments:Array<VKImageView>, width:Int, height:Int, layers:Int = 1):VKFramebuffer

@@ -28,6 +28,10 @@ class VKPhysicalDevice
 	public var framebufferNoAttachmentsSampleCounts(default, null):Int;
 	public var framebufferStencilSampleCounts(default, null):Int;
 	public var isDiscrete(default, null):Bool;
+	public var maxPushConstantsSize(default, null):Int;
+	public var minStorageBufferOffsetAlignment(default, null):Int64;
+	public var minUniformBufferOffsetAlignment(default, null):Int64;
+	public var nonCoherentAtomSize(default, null):Int64;
 	public var supportsPresent(default, null):Bool;
 	public var queueFamilies(default, null):Array<VKQueueFamilyInfo>;
 
@@ -47,6 +51,10 @@ class VKPhysicalDevice
 		framebufferDepthSampleCounts = data.framebufferDepthSampleCounts;
 		framebufferNoAttachmentsSampleCounts = data.framebufferNoAttachmentsSampleCounts;
 		framebufferStencilSampleCounts = data.framebufferStencilSampleCounts;
+		maxPushConstantsSize = data.maxPushConstantsSize;
+		minStorageBufferOffsetAlignment = VK.__makeHandle(data.minStorageBufferOffsetAlignment);
+		minUniformBufferOffsetAlignment = VK.__makeHandle(data.minUniformBufferOffsetAlignment);
+		nonCoherentAtomSize = VK.__makeHandle(data.nonCoherentAtomSize);
 		deviceTypeName = switch (deviceType)
 		{
 			case 1: "integrated-gpu";

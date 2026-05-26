@@ -62,6 +62,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
 #include <vector>
 
 #ifdef LIME_SDL_SOUND
@@ -132,6 +133,34 @@ namespace lime {
 	static VkSurfaceKHR UInt64ToVulkanSurface (uint64_t value) {
 
 		return (VkSurfaceKHR)value;
+
+	}
+
+
+	struct ManagedVulkanMappedMemory {
+
+		VkDevice device;
+		VkDeviceMemory memory;
+		VkDeviceSize offset;
+		VkDeviceSize size;
+		void* data;
+
+	};
+
+
+	static std::unordered_map<uint64_t, ManagedVulkanMappedMemory> mappedVulkanMemory;
+
+
+	static uint64_t GetManagedVulkanMappedMemoryKey (VkDeviceMemory memory) {
+
+		return (uint64_t)(uintptr_t)memory;
+
+	}
+
+
+	static VkDeviceSize NormalizeVulkanRangeSize (uint64_t size) {
+
+		return size == 0 ? VK_WHOLE_SIZE : (VkDeviceSize)size;
 
 	}
 
@@ -359,6 +388,88 @@ namespace lime {
 		}
 
 		return proc;
+
+	}
+
+
+	static bool UpdateManagedVulkanDescriptorSets (Window* targetWindow, VkInstance instance, VkDevice device, const std::vector<int>& packed) {
+
+		if (packed.empty ()) return true;
+
+		PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets =
+			(PFN_vkUpdateDescriptorSets)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUpdateDescriptorSets");
+		if (!vkUpdateDescriptorSets) return false;
+
+		int writeCount = packed[0];
+		if (writeCount < 0) return false;
+
+		std::vector<VkDescriptorBufferInfo> bufferInfos;
+		std::vector<VkDescriptorImageInfo> imageInfos;
+		std::vector<VkWriteDescriptorSet> descriptorWrites;
+		bufferInfos.reserve ((size_t)writeCount);
+		imageInfos.reserve ((size_t)writeCount);
+		descriptorWrites.reserve ((size_t)writeCount);
+
+		size_t index = 1;
+		for (int i = 0; i < writeCount; ++i) {
+
+			if (index >= packed.size ()) return false;
+			int kind = packed[index++];
+
+			VkWriteDescriptorSet write;
+			memset (&write, 0, sizeof (write));
+			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write.descriptorCount = 1;
+
+			if (kind == 0) {
+
+				if (index + 11 > packed.size ()) return false;
+				write.dstSet = (VkDescriptorSet)(uintptr_t)CombineVulkanHandle (packed[index], packed[index + 1]);
+				write.dstBinding = (uint32_t)packed[index + 2];
+				write.dstArrayElement = (uint32_t)packed[index + 3];
+				write.descriptorType = (VkDescriptorType)packed[index + 4];
+
+				VkDescriptorBufferInfo bufferInfo;
+				memset (&bufferInfo, 0, sizeof (bufferInfo));
+				bufferInfo.buffer = (VkBuffer)(uintptr_t)CombineVulkanHandle (packed[index + 5], packed[index + 6]);
+				bufferInfo.offset = (VkDeviceSize)CombineVulkanHandle (packed[index + 7], packed[index + 8]);
+				bufferInfo.range = NormalizeVulkanRangeSize (CombineVulkanHandle (packed[index + 9], packed[index + 10]));
+				bufferInfos.push_back (bufferInfo);
+				write.pBufferInfo = &bufferInfos[bufferInfos.size () - 1];
+				index += 11;
+
+			} else if (kind == 1) {
+
+				if (index + 10 > packed.size ()) return false;
+				write.dstSet = (VkDescriptorSet)(uintptr_t)CombineVulkanHandle (packed[index], packed[index + 1]);
+				write.dstBinding = (uint32_t)packed[index + 2];
+				write.dstArrayElement = (uint32_t)packed[index + 3];
+				write.descriptorType = (VkDescriptorType)packed[index + 4];
+
+				VkDescriptorImageInfo imageInfo;
+				memset (&imageInfo, 0, sizeof (imageInfo));
+				imageInfo.imageView = (VkImageView)(uintptr_t)CombineVulkanHandle (packed[index + 5], packed[index + 6]);
+				imageInfo.sampler = (VkSampler)(uintptr_t)CombineVulkanHandle (packed[index + 7], packed[index + 8]);
+				imageInfo.imageLayout = (VkImageLayout)packed[index + 9];
+				imageInfos.push_back (imageInfo);
+				write.pImageInfo = &imageInfos[imageInfos.size () - 1];
+				index += 10;
+
+			} else {
+
+				lastVKError = "Invalid Vulkan descriptor write kind";
+				return false;
+
+			}
+
+			if (!write.dstSet) return false;
+			descriptorWrites.push_back (write);
+
+		}
+
+		vkUpdateDescriptorSets (device, (uint32_t)descriptorWrites.size (), descriptorWrites.empty () ? 0 : descriptorWrites.data (), 0, 0);
+		lastVKError.clear ();
+		return true;
 
 	}
 
@@ -4918,6 +5029,10 @@ namespace lime {
 		const int id_framebufferDepthSampleCounts = val_id ("framebufferDepthSampleCounts");
 		const int id_framebufferNoAttachmentsSampleCounts = val_id ("framebufferNoAttachmentsSampleCounts");
 		const int id_framebufferStencilSampleCounts = val_id ("framebufferStencilSampleCounts");
+		const int id_maxPushConstantsSize = val_id ("maxPushConstantsSize");
+		const int id_minStorageBufferOffsetAlignment = val_id ("minStorageBufferOffsetAlignment");
+		const int id_minUniformBufferOffsetAlignment = val_id ("minUniformBufferOffsetAlignment");
+		const int id_nonCoherentAtomSize = val_id ("nonCoherentAtomSize");
 		const int id_queueFamilies = val_id ("queueFamilies");
 
 		const int id_index = val_id ("index");
@@ -4980,6 +5095,12 @@ namespace lime {
 			alloc_field (deviceObject, id_framebufferDepthSampleCounts, alloc_int ((int)properties.limits.framebufferDepthSampleCounts));
 			alloc_field (deviceObject, id_framebufferNoAttachmentsSampleCounts, alloc_int ((int)properties.limits.framebufferNoAttachmentsSampleCounts));
 			alloc_field (deviceObject, id_framebufferStencilSampleCounts, alloc_int ((int)properties.limits.framebufferStencilSampleCounts));
+			alloc_field (deviceObject, id_maxPushConstantsSize, alloc_int ((int)properties.limits.maxPushConstantsSize));
+			alloc_field (deviceObject, id_minStorageBufferOffsetAlignment,
+				CreateVulkanHandleValue ((uint64_t)properties.limits.minStorageBufferOffsetAlignment));
+			alloc_field (deviceObject, id_minUniformBufferOffsetAlignment,
+				CreateVulkanHandleValue ((uint64_t)properties.limits.minUniformBufferOffsetAlignment));
+			alloc_field (deviceObject, id_nonCoherentAtomSize, CreateVulkanHandleValue ((uint64_t)properties.limits.nonCoherentAtomSize));
 			alloc_field (deviceObject, id_queueFamilies, queueFamilyArray);
 			val_array_set_i (devices, i, deviceObject);
 
@@ -5074,6 +5195,10 @@ namespace lime {
 		const int id_framebufferDepthSampleCounts = hl_hash_utf8 ("framebufferDepthSampleCounts");
 		const int id_framebufferNoAttachmentsSampleCounts = hl_hash_utf8 ("framebufferNoAttachmentsSampleCounts");
 		const int id_framebufferStencilSampleCounts = hl_hash_utf8 ("framebufferStencilSampleCounts");
+		const int id_maxPushConstantsSize = hl_hash_utf8 ("maxPushConstantsSize");
+		const int id_minStorageBufferOffsetAlignment = hl_hash_utf8 ("minStorageBufferOffsetAlignment");
+		const int id_minUniformBufferOffsetAlignment = hl_hash_utf8 ("minUniformBufferOffsetAlignment");
+		const int id_nonCoherentAtomSize = hl_hash_utf8 ("nonCoherentAtomSize");
 		const int id_queueFamilies = hl_hash_utf8 ("queueFamilies");
 
 		const int id_index = hl_hash_utf8 ("index");
@@ -5138,6 +5263,13 @@ namespace lime {
 			hl_dyn_seti (deviceObject, id_framebufferDepthSampleCounts, &hlt_i32, properties.limits.framebufferDepthSampleCounts);
 			hl_dyn_seti (deviceObject, id_framebufferNoAttachmentsSampleCounts, &hlt_i32, properties.limits.framebufferNoAttachmentsSampleCounts);
 			hl_dyn_seti (deviceObject, id_framebufferStencilSampleCounts, &hlt_i32, properties.limits.framebufferStencilSampleCounts);
+			hl_dyn_seti (deviceObject, id_maxPushConstantsSize, &hlt_i32, properties.limits.maxPushConstantsSize);
+			hl_dyn_setp (deviceObject, id_minStorageBufferOffsetAlignment, &hlt_dynobj,
+				HLCreateVulkanHandleValue ((uint64_t)properties.limits.minStorageBufferOffsetAlignment));
+			hl_dyn_setp (deviceObject, id_minUniformBufferOffsetAlignment, &hlt_dynobj,
+				HLCreateVulkanHandleValue ((uint64_t)properties.limits.minUniformBufferOffsetAlignment));
+			hl_dyn_setp (deviceObject, id_nonCoherentAtomSize, &hlt_dynobj,
+				HLCreateVulkanHandleValue ((uint64_t)properties.limits.nonCoherentAtomSize));
 			hl_dyn_setp (deviceObject, id_queueFamilies, &hlt_array, queueFamilyArray);
 
 		}
@@ -6452,6 +6584,16 @@ namespace lime {
 		PFN_vkFreeMemory vkFreeMemory = (PFN_vkFreeMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkFreeMemory");
 		if (vkFreeMemory) {
 
+			uint64_t mapKey = GetManagedVulkanMappedMemoryKey (memory);
+			std::unordered_map<uint64_t, ManagedVulkanMappedMemory>::iterator mapped = mappedVulkanMemory.find (mapKey);
+			if (mapped != mappedVulkanMemory.end ()) {
+
+				PFN_vkUnmapMemory vkUnmapMemory = (PFN_vkUnmapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUnmapMemory");
+				if (vkUnmapMemory) vkUnmapMemory (device, memory);
+				mappedVulkanMemory.erase (mapped);
+
+			}
+
 			vkFreeMemory (device, memory, 0);
 			lastVKError.clear ();
 
@@ -6474,6 +6616,16 @@ namespace lime {
 		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
 		PFN_vkFreeMemory vkFreeMemory = (PFN_vkFreeMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkFreeMemory");
 		if (vkFreeMemory) {
+
+			uint64_t mapKey = GetManagedVulkanMappedMemoryKey (memory);
+			std::unordered_map<uint64_t, ManagedVulkanMappedMemory>::iterator mapped = mappedVulkanMemory.find (mapKey);
+			if (mapped != mappedVulkanMemory.end ()) {
+
+				PFN_vkUnmapMemory vkUnmapMemory = (PFN_vkUnmapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUnmapMemory");
+				if (vkUnmapMemory) vkUnmapMemory (device, memory);
+				mappedVulkanMemory.erase (mapped);
+
+			}
 
 			vkFreeMemory (device, memory, 0);
 			lastVKError.clear ();
@@ -6642,6 +6794,392 @@ namespace lime {
 
 		memcpy (bytes->b + byteOffset, mappedData, byteLength);
 		vkUnmapMemory (device, memory);
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_map_memory (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int memoryHigh, int memoryLow,
+		int offsetHigh, int offsetLow, int sizeHigh, int sizeLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		VkDeviceSize offset = (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow);
+		VkDeviceSize size = NormalizeVulkanRangeSize (CombineVulkanHandle (sizeHigh, sizeLow));
+		if (!memory) return false;
+
+		uint64_t mapKey = GetManagedVulkanMappedMemoryKey (memory);
+		if (mappedVulkanMemory.find (mapKey) != mappedVulkanMemory.end ()) {
+
+			lastVKError.clear ();
+			return true;
+
+		}
+
+		PFN_vkMapMemory vkMapMemory = (PFN_vkMapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkMapMemory");
+		if (!vkMapMemory) return false;
+
+		void* mappedData = 0;
+		VkResult result = vkMapMemory (device, memory, offset, size, (VkMemoryMapFlags)flags, &mappedData);
+		if (result != VK_SUCCESS || !mappedData) {
+
+			lastVKError = "vkMapMemory failed";
+			return false;
+
+		}
+
+		ManagedVulkanMappedMemory mapped;
+		mapped.device = device;
+		mapped.memory = memory;
+		mapped.offset = offset;
+		mapped.size = size;
+		mapped.data = mappedData;
+		mappedVulkanMemory[mapKey] = mapped;
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_map_memory) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int memoryHigh, int memoryLow, int offsetHigh, int offsetLow, int sizeHigh, int sizeLow, int flags) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		VkDeviceSize offset = (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow);
+		VkDeviceSize size = NormalizeVulkanRangeSize (CombineVulkanHandle (sizeHigh, sizeLow));
+		if (!memory) return false;
+
+		uint64_t mapKey = GetManagedVulkanMappedMemoryKey (memory);
+		if (mappedVulkanMemory.find (mapKey) != mappedVulkanMemory.end ()) {
+
+			lastVKError.clear ();
+			return true;
+
+		}
+
+		PFN_vkMapMemory vkMapMemory = (PFN_vkMapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkMapMemory");
+		if (!vkMapMemory) return false;
+
+		void* mappedData = 0;
+		VkResult result = vkMapMemory (device, memory, offset, size, (VkMemoryMapFlags)flags, &mappedData);
+		if (result != VK_SUCCESS || !mappedData) {
+
+			lastVKError = "vkMapMemory failed";
+			return false;
+
+		}
+
+		ManagedVulkanMappedMemory mapped;
+		mapped.device = device;
+		mapped.memory = memory;
+		mapped.offset = offset;
+		mapped.size = size;
+		mapped.data = mappedData;
+		mappedVulkanMemory[mapKey] = mapped;
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	void lime_vk_unmap_memory (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int memoryHigh, int memoryLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		uint64_t mapKey = GetManagedVulkanMappedMemoryKey (memory);
+		std::unordered_map<uint64_t, ManagedVulkanMappedMemory>::iterator mapped = mappedVulkanMemory.find (mapKey);
+		if (mapped == mappedVulkanMemory.end ()) return;
+
+		PFN_vkUnmapMemory vkUnmapMemory = (PFN_vkUnmapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUnmapMemory");
+		if (!vkUnmapMemory) return;
+
+		vkUnmapMemory (device, memory);
+		mappedVulkanMemory.erase (mapped);
+		lastVKError.clear ();
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	HL_PRIM void HL_NAME(hl_vk_unmap_memory) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int memoryHigh, int memoryLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		uint64_t mapKey = GetManagedVulkanMappedMemoryKey (memory);
+		std::unordered_map<uint64_t, ManagedVulkanMappedMemory>::iterator mapped = mappedVulkanMemory.find (mapKey);
+		if (mapped == mappedVulkanMemory.end ()) return;
+
+		PFN_vkUnmapMemory vkUnmapMemory = (PFN_vkUnmapMemory)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkUnmapMemory");
+		if (!vkUnmapMemory) return;
+
+		vkUnmapMemory (device, memory);
+		mappedVulkanMemory.erase (mapped);
+		lastVKError.clear ();
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+#endif
+
+	}
+
+
+	bool lime_vk_write_mapped_memory (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int memoryHigh, int memoryLow,
+		int offsetHigh, int offsetLow, value bytes, int byteOffset, int byteLength) {
+
+#ifdef LIME_VULKAN
+		Bytes data (bytes);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		uint64_t offset = CombineVulkanHandle (offsetHigh, offsetLow);
+		if (!memory || !data.b || byteOffset < 0 || byteLength < 0 || byteOffset + byteLength > data.length) {
+
+			lastVKError = "Invalid mapped Vulkan memory write range";
+			return false;
+
+		}
+
+		std::unordered_map<uint64_t, ManagedVulkanMappedMemory>::iterator mapped = mappedVulkanMemory.find (GetManagedVulkanMappedMemoryKey (memory));
+		if (mapped == mappedVulkanMemory.end ()) {
+
+			lastVKError = "Vulkan memory is not mapped";
+			return false;
+
+		}
+
+		if (offset < mapped->second.offset) {
+
+			lastVKError = "Mapped Vulkan memory write offset is outside the mapped range";
+			return false;
+
+		}
+
+		uint64_t relativeOffset = offset - mapped->second.offset;
+		if (mapped->second.size != VK_WHOLE_SIZE && relativeOffset + (uint64_t)byteLength > (uint64_t)mapped->second.size) {
+
+			lastVKError = "Mapped Vulkan memory write exceeds the mapped range";
+			return false;
+
+		}
+
+		memcpy ((unsigned char*)mapped->second.data + relativeOffset, data.b + byteOffset, byteLength);
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_write_mapped_memory) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int memoryHigh, int memoryLow, int offsetHigh, int offsetLow, Bytes* bytes, int byteOffset, int byteLength) {
+
+#ifdef LIME_VULKAN
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		uint64_t offset = CombineVulkanHandle (offsetHigh, offsetLow);
+		if (!memory || !bytes || !bytes->b || byteOffset < 0 || byteLength < 0 || byteOffset + byteLength > bytes->length) {
+
+			lastVKError = "Invalid mapped Vulkan memory write range";
+			return false;
+
+		}
+
+		std::unordered_map<uint64_t, ManagedVulkanMappedMemory>::iterator mapped = mappedVulkanMemory.find (GetManagedVulkanMappedMemoryKey (memory));
+		if (mapped == mappedVulkanMemory.end ()) {
+
+			lastVKError = "Vulkan memory is not mapped";
+			return false;
+
+		}
+
+		if (offset < mapped->second.offset) {
+
+			lastVKError = "Mapped Vulkan memory write offset is outside the mapped range";
+			return false;
+
+		}
+
+		uint64_t relativeOffset = offset - mapped->second.offset;
+		if (mapped->second.size != VK_WHOLE_SIZE && relativeOffset + (uint64_t)byteLength > (uint64_t)mapped->second.size) {
+
+			lastVKError = "Mapped Vulkan memory write exceeds the mapped range";
+			return false;
+
+		}
+
+		memcpy ((unsigned char*)mapped->second.data + relativeOffset, bytes->b + byteOffset, byteLength);
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_flush_mapped_memory (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int memoryHigh,
+		int memoryLow, int offsetHigh, int offsetLow, int sizeHigh, int sizeLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		PFN_vkFlushMappedMemoryRanges vkFlushMappedMemoryRanges =
+			(PFN_vkFlushMappedMemoryRanges)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkFlushMappedMemoryRanges");
+		if (!vkFlushMappedMemoryRanges || !memory) return false;
+
+		VkMappedMemoryRange range;
+		memset (&range, 0, sizeof (range));
+		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range.memory = memory;
+		range.offset = (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow);
+		range.size = NormalizeVulkanRangeSize (CombineVulkanHandle (sizeHigh, sizeLow));
+		VkResult result = vkFlushMappedMemoryRanges (device, 1, &range);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkFlushMappedMemoryRanges failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_flush_mapped_memory) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int memoryHigh, int memoryLow, int offsetHigh, int offsetLow, int sizeHigh, int sizeLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		PFN_vkFlushMappedMemoryRanges vkFlushMappedMemoryRanges =
+			(PFN_vkFlushMappedMemoryRanges)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkFlushMappedMemoryRanges");
+		if (!vkFlushMappedMemoryRanges || !memory) return false;
+
+		VkMappedMemoryRange range;
+		memset (&range, 0, sizeof (range));
+		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range.memory = memory;
+		range.offset = (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow);
+		range.size = NormalizeVulkanRangeSize (CombineVulkanHandle (sizeHigh, sizeLow));
+		VkResult result = vkFlushMappedMemoryRanges (device, 1, &range);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkFlushMappedMemoryRanges failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_invalidate_mapped_memory (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int memoryHigh,
+		int memoryLow, int offsetHigh, int offsetLow, int sizeHigh, int sizeLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges =
+			(PFN_vkInvalidateMappedMemoryRanges)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkInvalidateMappedMemoryRanges");
+		if (!vkInvalidateMappedMemoryRanges || !memory) return false;
+
+		VkMappedMemoryRange range;
+		memset (&range, 0, sizeof (range));
+		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range.memory = memory;
+		range.offset = (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow);
+		range.size = NormalizeVulkanRangeSize (CombineVulkanHandle (sizeHigh, sizeLow));
+		VkResult result = vkInvalidateMappedMemoryRanges (device, 1, &range);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkInvalidateMappedMemoryRanges failed";
+			return false;
+
+		}
+
+		lastVKError.clear ();
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_invalidate_mapped_memory) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int memoryHigh, int memoryLow, int offsetHigh, int offsetLow, int sizeHigh, int sizeLow) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		VkDeviceMemory memory = (VkDeviceMemory)(uintptr_t)CombineVulkanHandle (memoryHigh, memoryLow);
+		PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges =
+			(PFN_vkInvalidateMappedMemoryRanges)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkInvalidateMappedMemoryRanges");
+		if (!vkInvalidateMappedMemoryRanges || !memory) return false;
+
+		VkMappedMemoryRange range;
+		memset (&range, 0, sizeof (range));
+		range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+		range.memory = memory;
+		range.offset = (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow);
+		range.size = NormalizeVulkanRangeSize (CombineVulkanHandle (sizeHigh, sizeLow));
+		VkResult result = vkInvalidateMappedMemoryRanges (device, 1, &range);
+		if (result != VK_SUCCESS) {
+
+			lastVKError = "vkInvalidateMappedMemoryRanges failed";
+			return false;
+
+		}
+
 		lastVKError.clear ();
 		return true;
 #else
@@ -9144,6 +9682,37 @@ namespace lime {
 	}
 
 
+	bool lime_vk_update_descriptor_sets (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, value writes) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		return UpdateManagedVulkanDescriptorSets (targetWindow, instance, device, GetVulkanIntVector (writes));
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_update_descriptor_sets) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, hl_varray* writes) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		return UpdateManagedVulkanDescriptorSets (targetWindow, instance, device, GetHLVulkanIntVector (writes));
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	value lime_vk_create_pipeline_layout (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, value setLayouts,
 		int pushConstantStages, int pushConstantSize) {
 
@@ -10296,6 +10865,56 @@ namespace lime {
 	}
 
 
+	bool lime_vk_cmd_bind_descriptor_set_dynamic_offset (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, int dynamicOffset, int firstSet,
+		int bindPoint) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets =
+			(PFN_vkCmdBindDescriptorSets)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdBindDescriptorSets");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkPipelineLayout layout = (VkPipelineLayout)(uintptr_t)CombineVulkanHandle (layoutHigh, layoutLow);
+		VkDescriptorSet descriptorSet = (VkDescriptorSet)(uintptr_t)CombineVulkanHandle (setHigh, setLow);
+		uint32_t offset = (uint32_t)dynamicOffset;
+		if (!vkCmdBindDescriptorSets || !commandBuffer || !layout || !descriptorSet) return false;
+		vkCmdBindDescriptorSets (commandBuffer, (VkPipelineBindPoint)bindPoint, layout, (uint32_t)firstSet, 1, &descriptorSet, 1, &offset);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_bind_descriptor_set_dynamic_offset) (HL_CFFIPointer* window, int instanceHigh, int instanceLow,
+		int deviceHigh, int deviceLow, int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow,
+		int dynamicOffset, int firstSet, int bindPoint) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets =
+			(PFN_vkCmdBindDescriptorSets)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdBindDescriptorSets");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkPipelineLayout layout = (VkPipelineLayout)(uintptr_t)CombineVulkanHandle (layoutHigh, layoutLow);
+		VkDescriptorSet descriptorSet = (VkDescriptorSet)(uintptr_t)CombineVulkanHandle (setHigh, setLow);
+		uint32_t offset = (uint32_t)dynamicOffset;
+		if (!vkCmdBindDescriptorSets || !commandBuffer || !layout || !descriptorSet) return false;
+		vkCmdBindDescriptorSets (commandBuffer, (VkPipelineBindPoint)bindPoint, layout, (uint32_t)firstSet, 1, &descriptorSet, 1, &offset);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
 	value lime_vulkan_renderer_get_info (value handle) {
 
 		if (val_is_null (handle)) return alloc_string ("");
@@ -10582,6 +11201,99 @@ namespace lime {
 		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
 		if (!vkCmdDrawIndexed || !commandBuffer) return false;
 		vkCmdDrawIndexed (commandBuffer, (uint32_t)indexCount, (uint32_t)instanceCount, (uint32_t)firstIndex, vertexOffset, (uint32_t)firstInstance);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_cmd_draw_indirect (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount, int stride) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdDrawIndirect vkCmdDrawIndirect = (PFN_vkCmdDrawIndirect)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkCmdDrawIndirect");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkBuffer buffer = (VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow);
+		if (!vkCmdDrawIndirect || !commandBuffer || !buffer) return false;
+		vkCmdDrawIndirect (commandBuffer, buffer, (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow), (uint32_t)drawCount,
+			(uint32_t)stride);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_draw_indirect) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount, int stride) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdDrawIndirect vkCmdDrawIndirect = (PFN_vkCmdDrawIndirect)GetManagedVulkanDeviceProc (targetWindow, instance, device,
+			"vkCmdDrawIndirect");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkBuffer buffer = (VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow);
+		if (!vkCmdDrawIndirect || !commandBuffer || !buffer) return false;
+		vkCmdDrawIndirect (commandBuffer, buffer, (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow), (uint32_t)drawCount,
+			(uint32_t)stride);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_cmd_draw_indexed_indirect (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount, int stride) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdDrawIndexedIndirect vkCmdDrawIndexedIndirect =
+			(PFN_vkCmdDrawIndexedIndirect)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdDrawIndexedIndirect");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkBuffer buffer = (VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow);
+		if (!vkCmdDrawIndexedIndirect || !commandBuffer || !buffer) return false;
+		vkCmdDrawIndexedIndirect (commandBuffer, buffer, (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow), (uint32_t)drawCount,
+			(uint32_t)stride);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_draw_indexed_indirect) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount,
+		int stride) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdDrawIndexedIndirect vkCmdDrawIndexedIndirect =
+			(PFN_vkCmdDrawIndexedIndirect)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdDrawIndexedIndirect");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		VkBuffer buffer = (VkBuffer)(uintptr_t)CombineVulkanHandle (bufferHigh, bufferLow);
+		if (!vkCmdDrawIndexedIndirect || !commandBuffer || !buffer) return false;
+		vkCmdDrawIndexedIndirect (commandBuffer, buffer, (VkDeviceSize)CombineVulkanHandle (offsetHigh, offsetLow), (uint32_t)drawCount,
+			(uint32_t)stride);
 		return true;
 #else
 		lastVKError = "Lime was built without lime-vulkan support";
@@ -11017,6 +11729,128 @@ namespace lime {
 		range.layerCount = (uint32_t)packed[6];
 		vkCmdClearDepthStencilImage (commandBuffer, (VkImage)(uintptr_t)CombineVulkanHandle (imageHigh, imageLow), (VkImageLayout)packed[0],
 			&depthStencil, 1, &range);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	bool lime_vk_cmd_clear_attachments (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, value state, value clear) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)val_data (window);
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdClearAttachments vkCmdClearAttachments =
+			(PFN_vkCmdClearAttachments)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdClearAttachments");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetVulkanIntVector (state);
+		std::vector<double> clearValues = GetVulkanDoubleVector (clear);
+		if (!vkCmdClearAttachments || !commandBuffer || packed.size () < 8 || clearValues.size () < 5) return false;
+
+		VkClearAttachment attachments[2];
+		memset (attachments, 0, sizeof (attachments));
+		uint32_t attachmentCount = 0;
+
+		if (packed[0] != 0) {
+
+			attachments[attachmentCount].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			attachments[attachmentCount].colorAttachment = 0;
+			attachments[attachmentCount].clearValue.color.float32[0] = (float)clearValues[0];
+			attachments[attachmentCount].clearValue.color.float32[1] = (float)clearValues[1];
+			attachments[attachmentCount].clearValue.color.float32[2] = (float)clearValues[2];
+			attachments[attachmentCount].clearValue.color.float32[3] = (float)clearValues[3];
+			attachmentCount++;
+
+		}
+
+		if (packed[1] != 0 || packed[2] != 0) {
+
+			attachments[attachmentCount].aspectMask = 0;
+			if (packed[1] != 0) attachments[attachmentCount].aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+			if (packed[2] != 0) attachments[attachmentCount].aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+			attachments[attachmentCount].clearValue.depthStencil.depth = (float)clearValues[4];
+			attachments[attachmentCount].clearValue.depthStencil.stencil = (uint32_t)packed[7];
+			attachmentCount++;
+
+		}
+
+		if (attachmentCount == 0) return true;
+
+		VkClearRect rect;
+		memset (&rect, 0, sizeof (rect));
+		rect.rect.offset.x = packed[3];
+		rect.rect.offset.y = packed[4];
+		rect.rect.extent.width = (uint32_t)packed[5];
+		rect.rect.extent.height = (uint32_t)packed[6];
+		rect.baseArrayLayer = 0;
+		rect.layerCount = 1;
+		vkCmdClearAttachments (commandBuffer, attachmentCount, attachments, 1, &rect);
+		return true;
+#else
+		lastVKError = "Lime was built without lime-vulkan support";
+		return false;
+#endif
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_clear_attachments) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, hl_varray* state, hl_varray* clear) {
+
+#ifdef LIME_VULKAN
+		Window* targetWindow = (Window*)window->ptr;
+		VkInstance instance = (VkInstance)(uintptr_t)CombineVulkanHandle (instanceHigh, instanceLow);
+		VkDevice device = (VkDevice)(uintptr_t)CombineVulkanHandle (deviceHigh, deviceLow);
+		PFN_vkCmdClearAttachments vkCmdClearAttachments =
+			(PFN_vkCmdClearAttachments)GetManagedVulkanDeviceProc (targetWindow, instance, device, "vkCmdClearAttachments");
+		VkCommandBuffer commandBuffer = (VkCommandBuffer)(uintptr_t)CombineVulkanHandle (commandBufferHigh, commandBufferLow);
+		std::vector<int> packed = GetHLVulkanIntVector (state);
+		std::vector<double> clearValues = GetHLVulkanDoubleVector (clear);
+		if (!vkCmdClearAttachments || !commandBuffer || packed.size () < 8 || clearValues.size () < 5) return false;
+
+		VkClearAttachment attachments[2];
+		memset (attachments, 0, sizeof (attachments));
+		uint32_t attachmentCount = 0;
+
+		if (packed[0] != 0) {
+
+			attachments[attachmentCount].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			attachments[attachmentCount].colorAttachment = 0;
+			attachments[attachmentCount].clearValue.color.float32[0] = (float)clearValues[0];
+			attachments[attachmentCount].clearValue.color.float32[1] = (float)clearValues[1];
+			attachments[attachmentCount].clearValue.color.float32[2] = (float)clearValues[2];
+			attachments[attachmentCount].clearValue.color.float32[3] = (float)clearValues[3];
+			attachmentCount++;
+
+		}
+
+		if (packed[1] != 0 || packed[2] != 0) {
+
+			attachments[attachmentCount].aspectMask = 0;
+			if (packed[1] != 0) attachments[attachmentCount].aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+			if (packed[2] != 0) attachments[attachmentCount].aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+			attachments[attachmentCount].clearValue.depthStencil.depth = (float)clearValues[4];
+			attachments[attachmentCount].clearValue.depthStencil.stencil = (uint32_t)packed[7];
+			attachmentCount++;
+
+		}
+
+		if (attachmentCount == 0) return true;
+
+		VkClearRect rect;
+		memset (&rect, 0, sizeof (rect));
+		rect.rect.offset.x = packed[3];
+		rect.rect.offset.y = packed[4];
+		rect.rect.extent.width = (uint32_t)packed[5];
+		rect.rect.extent.height = (uint32_t)packed[6];
+		rect.baseArrayLayer = 0;
+		rect.layerCount = 1;
+		vkCmdClearAttachments (commandBuffer, attachmentCount, attachments, 1, &rect);
 		return true;
 #else
 		lastVKError = "Lime was built without lime-vulkan support";
@@ -12662,6 +13496,11 @@ namespace lime {
 	DEFINE_PRIME7v (lime_vk_free_memory);
 	DEFINE_PRIME12 (lime_vk_upload_memory);
 	DEFINE_PRIME12 (lime_vk_download_memory);
+	DEFINE_PRIME12 (lime_vk_map_memory);
+	DEFINE_PRIME7v (lime_vk_unmap_memory);
+	DEFINE_PRIME12 (lime_vk_write_mapped_memory);
+	DEFINE_PRIME11 (lime_vk_flush_mapped_memory);
+	DEFINE_PRIME11 (lime_vk_invalidate_mapped_memory);
 	DEFINE_PRIME8 (lime_vk_create_buffer);
 	DEFINE_PRIME7v (lime_vk_destroy_buffer);
 	DEFINE_PRIME7 (lime_vk_get_buffer_memory_requirements);
@@ -12694,6 +13533,7 @@ namespace lime {
 	DEFINE_PRIME9 (lime_vk_allocate_descriptor_set);
 	DEFINE_PRIME14 (lime_vk_update_descriptor_set_image);
 	DEFINE_PRIME13 (lime_vk_update_descriptor_set_buffer);
+	DEFINE_PRIME6 (lime_vk_update_descriptor_sets);
 	DEFINE_PRIME8 (lime_vk_create_pipeline_layout);
 	DEFINE_PRIME7v (lime_vk_destroy_pipeline_layout);
 	DEFINE_PRIME8 (lime_vk_create_pipeline_cache);
@@ -12707,18 +13547,22 @@ namespace lime {
 	DEFINE_PRIME10 (lime_vk_cmd_bind_pipeline);
 	DEFINE_PRIME13 (lime_vk_cmd_bind_descriptor_set);
 	DEFINE_PRIME12 (lime_vk_cmd_bind_descriptor_set_ex);
+	DEFINE_PRIME14 (lime_vk_cmd_bind_descriptor_set_dynamic_offset);
 	DEFINE_PRIME12 (lime_vk_cmd_bind_vertex_buffer);
 	DEFINE_PRIME12 (lime_vk_cmd_bind_index_buffer);
 	DEFINE_PRIME13 (lime_vk_cmd_set_viewport);
 	DEFINE_PRIME11 (lime_vk_cmd_set_scissor);
 	DEFINE_PRIME11 (lime_vk_cmd_draw);
 	DEFINE_PRIME12 (lime_vk_cmd_draw_indexed);
+	DEFINE_PRIME13 (lime_vk_cmd_draw_indirect);
+	DEFINE_PRIME13 (lime_vk_cmd_draw_indexed_indirect);
 	DEFINE_PRIME12 (lime_vk_cmd_copy_buffer);
 	DEFINE_PRIME12 (lime_vk_cmd_copy_buffer_to_image_region);
 	DEFINE_PRIME12 (lime_vk_cmd_copy_image_to_buffer_region);
 	DEFINE_PRIME10 (lime_vk_cmd_pipeline_barrier_image);
 	DEFINE_PRIME12 (lime_vk_cmd_clear_color_image);
 	DEFINE_PRIME11 (lime_vk_cmd_clear_depth_stencil_image);
+	DEFINE_PRIME9 (lime_vk_cmd_clear_attachments);
 	DEFINE_PRIME12 (lime_vk_cmd_blit_image);
 	DEFINE_PRIME11 (lime_vk_cmd_push_constants);
 	DEFINE_PRIME0 (lime_vk_get_last_error);

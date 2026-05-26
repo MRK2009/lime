@@ -17,6 +17,9 @@ class VKDeviceMemory
 	public var device(default, null):VKDevice;
 	public var handle(default, null):Int64;
 	public var memoryTypeIndex(default, null):Int;
+	public var mapped(default, null):Bool = false;
+	public var mappedOffset(default, null):Int64 = Int64.ofInt(0);
+	public var mappedSize(default, null):Int64 = Int64.ofInt(0);
 	public var properties(default, null):Int;
 	public var size(default, null):Int64;
 
@@ -32,6 +35,11 @@ class VKDeviceMemory
 
 	public function dispose():Void
 	{
+		if (mapped)
+		{
+			unmap();
+		}
+
 		#if (!macro && lime_cffi && lime_vulkan)
 		if (isValid() && device != null && device.isValid())
 		{
@@ -50,6 +58,140 @@ class VKDeviceMemory
 	public inline function isValid():Bool
 	{
 		return !VK.__isZero(handle);
+	}
+
+	/**
+		Maps host-visible memory and keeps it mapped for repeated writes or
+		readback. Passing `size` as `null` maps the rest of the allocation.
+	**/
+	public function map(offset:Int64 = null, size:Int64 = null, flags:Int = 0):Bool
+	{
+		if (offset == null)
+		{
+			offset = Int64.ofInt(0);
+		}
+		if (size == null)
+		{
+			size = Int64.ofInt(0);
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			var result = NativeCFFI.lime_vk_map_memory(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, offset.high, offset.low, size.high,
+				size.low, flags);
+			if (result)
+			{
+				mapped = true;
+				mappedOffset = offset;
+				mappedSize = size;
+			}
+			return result;
+		}
+		#end
+
+		return false;
+	}
+
+	public function unmap():Void
+	{
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (mapped && isValid() && device != null && device.isValid())
+		{
+			NativeCFFI.lime_vk_unmap_memory(device.instance.context.__windowHandle, device.instance.handle.high, device.instance.handle.low,
+				device.handle.high, device.handle.low, handle.high, handle.low);
+		}
+		#end
+
+		mapped = false;
+		mappedOffset = Int64.ofInt(0);
+		mappedSize = Int64.ofInt(0);
+	}
+
+	/**
+		Copies bytes into a currently mapped range without unmapping. This is the
+		hot-path companion to `upload()` for dynamic vertex/uniform streaming.
+	**/
+	public function writeBytes(bytes:Bytes, srcOffset:Int = 0, length:Int = -1, dstOffset:Int64 = null):Bool
+	{
+		if (bytes == null || !mapped)
+		{
+			return false;
+		}
+		if (dstOffset == null)
+		{
+			dstOffset = mappedOffset;
+		}
+		if (length < 0)
+		{
+			length = bytes.length - srcOffset;
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			return NativeCFFI.lime_vk_write_mapped_memory(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, dstOffset.high, dstOffset.low, bytes,
+				srcOffset, length);
+		}
+		#end
+
+		return false;
+	}
+
+	public function flush(offset:Int64 = null, size:Int64 = null):Bool
+	{
+		if (!mapped)
+		{
+			return false;
+		}
+		if (offset == null)
+		{
+			offset = mappedOffset;
+		}
+		if (size == null)
+		{
+			size = mappedSize;
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			return NativeCFFI.lime_vk_flush_mapped_memory(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, offset.high, offset.low, size.high,
+				size.low);
+		}
+		#end
+
+		return false;
+	}
+
+	public function invalidate(offset:Int64 = null, size:Int64 = null):Bool
+	{
+		if (!mapped)
+		{
+			return false;
+		}
+		if (offset == null)
+		{
+			offset = mappedOffset;
+		}
+		if (size == null)
+		{
+			size = mappedSize;
+		}
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			return NativeCFFI.lime_vk_invalidate_mapped_memory(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, offset.high, offset.low, size.high,
+				size.low);
+		}
+		#end
+
+		return false;
 	}
 
 	/**

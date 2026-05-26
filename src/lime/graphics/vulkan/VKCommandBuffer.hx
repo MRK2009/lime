@@ -95,6 +95,21 @@ class VKCommandBuffer
 		return false;
 	}
 
+	public function bindDescriptorSetDynamicOffset(layout:VKPipelineLayout, descriptorSet:VKDescriptorSet, dynamicOffset:Int, firstSet:Int = 0,
+			bindPoint:Int = VK.PIPELINE_BIND_POINT_GRAPHICS):Bool
+	{
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid() && layout != null && layout.isValid() && descriptorSet != null && descriptorSet.isValid())
+		{
+			return NativeCFFI.lime_vk_cmd_bind_descriptor_set_dynamic_offset(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, layout.handle.high, layout.handle.low,
+				descriptorSet.handle.high, descriptorSet.handle.low, dynamicOffset, firstSet, bindPoint);
+		}
+		#end
+
+		return false;
+	}
+
 	public function bindIndexBuffer(buffer:VKBuffer, offset:Int64 = null, indexType:Int = VK.INDEX_TYPE_UINT16):Bool
 	{
 		if (offset == null)
@@ -231,6 +246,23 @@ class VKCommandBuffer
 		return false;
 	}
 
+	public function clearAttachments(color:Bool, depth:Bool, stencil:Bool, x:Int, y:Int, width:Int, height:Int, red:Float = 0,
+			green:Float = 0, blue:Float = 0, alpha:Float = 0, depthValue:Float = 1, stencilValue:Int = 0):Bool
+	{
+		var state = [color ? 1 : 0, depth ? 1 : 0, stencil ? 1 : 0, x, y, width, height, stencilValue];
+		var clear = [red, green, blue, alpha, depthValue];
+
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid())
+		{
+			return NativeCFFI.lime_vk_cmd_clear_attachments(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, state, clear);
+		}
+		#end
+
+		return false;
+	}
+
 	public function copyBuffer(source:VKBuffer, destination:VKBuffer, size:Int64, sourceOffset:Int64 = null, destinationOffset:Int64 = null):Bool
 	{
 		if (sourceOffset == null) sourceOffset = Int64.ofInt(0);
@@ -347,6 +379,34 @@ class VKCommandBuffer
 		{
 			return NativeCFFI.lime_vk_cmd_draw_indexed(device.instance.context.__windowHandle, device.instance.handle.high, device.instance.handle.low,
 				device.handle.high, device.handle.low, handle.high, handle.low, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+		}
+		#end
+
+		return false;
+	}
+
+	public function drawIndirect(buffer:VKBuffer, offset:Int64, drawCount:Int, stride:Int):Bool
+	{
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid() && buffer != null && buffer.isValid())
+		{
+			return NativeCFFI.lime_vk_cmd_draw_indirect(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, buffer.handle.high, buffer.handle.low,
+				offset.high, offset.low, drawCount, stride);
+		}
+		#end
+
+		return false;
+	}
+
+	public function drawIndexedIndirect(buffer:VKBuffer, offset:Int64, drawCount:Int, stride:Int):Bool
+	{
+		#if (!macro && lime_cffi && lime_vulkan)
+		if (isValid() && device != null && device.isValid() && buffer != null && buffer.isValid())
+		{
+			return NativeCFFI.lime_vk_cmd_draw_indexed_indirect(device.instance.context.__windowHandle, device.instance.handle.high,
+				device.instance.handle.low, device.handle.high, device.handle.low, handle.high, handle.low, buffer.handle.high, buffer.handle.low,
+				offset.high, offset.low, drawCount, stride);
 		}
 		#end
 
