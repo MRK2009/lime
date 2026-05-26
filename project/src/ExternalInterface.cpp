@@ -149,6 +149,7 @@ namespace lime {
 
 
 	static std::unordered_map<uint64_t, ManagedVulkanMappedMemory> mappedVulkanMemory;
+	static std::unordered_map<uint64_t, std::unordered_map<std::string, PFN_vkVoidFunction> > managedVulkanDeviceProcCache;
 
 
 	static uint64_t GetManagedVulkanMappedMemoryKey (VkDeviceMemory memory) {
@@ -161,6 +162,13 @@ namespace lime {
 	static VkDeviceSize NormalizeVulkanRangeSize (uint64_t size) {
 
 		return size == 0 ? VK_WHOLE_SIZE : (VkDeviceSize)size;
+
+	}
+
+
+	static void ClearManagedVulkanDeviceProcCache (VkDevice device) {
+
+		if (device) managedVulkanDeviceProcCache.erase ((uint64_t)(uintptr_t)device);
 
 	}
 
@@ -356,10 +364,21 @@ namespace lime {
 
 	static PFN_vkVoidFunction GetManagedVulkanDeviceProc (Window* targetWindow, VkInstance instance, VkDevice device, const char* name) {
 
-		if (!targetWindow || !instance || !device) {
+		if (!targetWindow || !instance || !device || !name) {
 
 			lastVKError = "Missing Vulkan window, instance, or device";
 			return 0;
+
+		}
+
+		uint64_t deviceKey = (uint64_t)(uintptr_t)device;
+		std::string procName (name);
+		std::unordered_map<uint64_t, std::unordered_map<std::string, PFN_vkVoidFunction> >::iterator deviceCache =
+			managedVulkanDeviceProcCache.find (deviceKey);
+		if (deviceCache != managedVulkanDeviceProcCache.end ()) {
+
+			std::unordered_map<std::string, PFN_vkVoidFunction>::iterator procCache = deviceCache->second.find (procName);
+			if (procCache != deviceCache->second.end ()) return procCache->second;
 
 		}
 
@@ -379,14 +398,15 @@ namespace lime {
 
 		}
 
-		PFN_vkVoidFunction proc = vkGetDeviceProcAddr (device, name);
+		PFN_vkVoidFunction proc = vkGetDeviceProcAddr (device, procName.c_str ());
 		if (!proc) {
 
-			lastVKError = std::string ("Missing Vulkan device function: ") + name;
+			lastVKError = std::string ("Missing Vulkan device function: ") + procName;
 			return 0;
 
 		}
 
+		managedVulkanDeviceProcCache[deviceKey][procName] = proc;
 		return proc;
 
 	}
@@ -5376,6 +5396,7 @@ namespace lime {
 		PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (device, "vkDestroyDevice");
 		if (vkDestroyDevice) {
 
+			ClearManagedVulkanDeviceProcCache (device);
 			vkDestroyDevice (device, 0);
 
 		}
@@ -5402,6 +5423,7 @@ namespace lime {
 		PFN_vkDestroyDevice vkDestroyDevice = (PFN_vkDestroyDevice)vkGetDeviceProcAddr (device, "vkDestroyDevice");
 		if (vkDestroyDevice) {
 
+			ClearManagedVulkanDeviceProcCache (device);
 			vkDestroyDevice (device, 0);
 
 		}
