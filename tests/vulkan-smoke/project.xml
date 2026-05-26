@@ -8,7 +8,6 @@
 	<assets path="Assets" />
 
 	<haxelib name="lime" />
-	<haxedef name="lime-vulkan" />
 
 	<window width="64" height="64" fps="60" background="#000000" resizable="false" render-type="vulkan" />
 

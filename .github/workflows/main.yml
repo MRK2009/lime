@@ -18,7 +18,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev g++-multilib gcc-multilib libasound2-dev libx11-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libpulse-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev g++-multilib gcc-multilib libasound2-dev libx11-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libpulse-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev libvulkan-dev
 
       - uses: krdlab/setup-haxe@v2
         with:
@@ -110,7 +110,7 @@ jobs:
         run: |
           sudo add-apt-repository ppa:haxe/releases -y
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libx11-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libpulse-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libx11-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev libpulse-dev libmbedtls-dev libpng-dev libturbojpeg-dev libuv1-dev libvorbis-dev libvulkan-dev
 
       # krdlab/setup-haxe doesn't support arm64 linux
       # so this is our workaround for now
@@ -218,9 +218,9 @@ jobs:
           haxelib run lime rebuild tools -nocolor -verbose -nocffi
           haxelib run lime setup -alias -y -nocffi
 
-      - name: Rebuild Lime (Linux Vulkan)
+      - name: Rebuild Lime (Linux default Vulkan)
         run: |
-          lime rebuild linux -64 -release -nocolor -verbose -nocffi -D lime-vulkan
+          lime rebuild linux -64 -release -nocolor -verbose -nocffi
 
       - name: Build Vulkan smoke test app
         working-directory: tests/vulkan-smoke
@@ -242,7 +242,7 @@ jobs:
       - name: Build HelloWorld Vulkan sample
         run: |
           lime create HelloWorld -verbose -nocolor
-          lime build HelloWorld linux -release -verbose -nocolor -D lime-vulkan --window-render-type=vulkan
+          lime build HelloWorld linux -release -verbose -nocolor --window-render-type=vulkan
 
   macos:
     runs-on: macos-14
