@@ -36,7 +36,7 @@
 	<set name="LIME_SDL_SOUND" value="1" />
 	<set name="LIME_TINYFILEDIALOGS" value="1" if="windows || mac || linux" unless="winrt || emscripten" />
 	<set name="LIME_VULKAN" value="1" if="lime-vulkan" />
-	<set name="LIME_VULKAN" value="1" if="windows || linux" unless="no-vulkan || lime-no-vulkan || winrt || emscripten" />
+	<set name="LIME_VULKAN" value="1" if="windows || linux || android" unless="no-vulkan || lime-no-vulkan || winrt || emscripten" />
 	<set name="LIME_VORBIS" value="1" />
 	<!-- <set name="LIME_VPX" value="1" />
 	<set name="LIME_WEBM" value="1" /> -->
