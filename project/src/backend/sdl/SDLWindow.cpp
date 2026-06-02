@@ -475,6 +475,24 @@ namespace lime {
 
 		}
 
+		if (sdlRenderer) {
+
+			SDL_DestroyRenderer (sdlRenderer);
+			sdlRenderer = 0;
+
+		} else if (context) {
+
+			if (SDL_GL_GetCurrentContext () == context) {
+
+				SDL_GL_MakeCurrent (sdlWindow, NULL);
+
+			}
+
+			SDL_GL_DeleteContext (context);
+			context = 0;
+
+		}
+
 		if (sdlWindow) {
 
 			#if defined (HX_WINDOWS) && !defined (HX_WINRT)
@@ -483,16 +501,6 @@ namespace lime {
 
 			SDL_DestroyWindow (sdlWindow);
 			sdlWindow = 0;
-
-		}
-
-		if (sdlRenderer) {
-
-			SDL_DestroyRenderer (sdlRenderer);
-
-		} else if (context) {
-
-			SDL_GL_DeleteContext (context);
 
 		}
 
@@ -543,6 +551,24 @@ namespace lime {
 			#if defined (HX_WINDOWS) && !defined (HX_WINRT)
 			RestoreResizeEventHook (sdlWindow);
 			#endif
+
+			if (sdlRenderer) {
+
+				SDL_DestroyRenderer (sdlRenderer);
+				sdlRenderer = 0;
+
+			} else if (context) {
+
+				if (SDL_GL_GetCurrentContext () == context) {
+
+					SDL_GL_MakeCurrent (sdlWindow, NULL);
+
+				}
+
+				SDL_GL_DeleteContext (context);
+				context = 0;
+
+			}
 
 			SDL_DestroyWindow (sdlWindow);
 			sdlWindow = 0;
