@@ -12166,6 +12166,21 @@ namespace lime {
 	}
 
 
+	bool lime_vk_update_descriptor_sets (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, value writes) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_update_descriptor_sets) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, hl_varray* writes) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
 	value lime_vk_create_pipeline_layout (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, value setLayouts,
 		int pushConstantStages, int pushConstantSize) {
 
@@ -12378,6 +12393,24 @@ namespace lime {
 	}
 
 
+	bool lime_vk_cmd_bind_descriptor_set_dynamic_offset (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow, int dynamicOffset, int firstSet,
+		int bindPoint) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_bind_descriptor_set_dynamic_offset) (HL_CFFIPointer* window, int instanceHigh, int instanceLow,
+		int deviceHigh, int deviceLow, int commandBufferHigh, int commandBufferLow, int layoutHigh, int layoutLow, int setHigh, int setLow,
+		int dynamicOffset, int firstSet, int bindPoint) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
 	bool lime_vk_cmd_bind_vertex_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
 		int commandBufferLow, int bufferHigh, int bufferLow, int binding, int offsetHigh, int offsetLow) {
 
@@ -12474,6 +12507,39 @@ namespace lime {
 	}
 
 
+	bool lime_vk_cmd_draw_indirect (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount, int stride) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_draw_indirect) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount, int stride) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	bool lime_vk_cmd_draw_indexed_indirect (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow,
+		int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount, int stride) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_draw_indexed_indirect) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, int bufferHigh, int bufferLow, int offsetHigh, int offsetLow, int drawCount,
+		int stride) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
 	bool lime_vk_cmd_copy_buffer (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
 		int commandBufferLow, int sourceHigh, int sourceLow, int destinationHigh, int destinationLow, value state) {
 
@@ -12563,6 +12629,22 @@ namespace lime {
 
 	HL_PRIM bool HL_NAME(hl_vk_cmd_clear_depth_stencil_image) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
 		int deviceLow, int commandBufferHigh, int commandBufferLow, int imageHigh, int imageLow, hl_varray* state, hl_varray* clear) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	bool lime_vk_cmd_clear_attachments (value window, int instanceHigh, int instanceLow, int deviceHigh, int deviceLow, int commandBufferHigh,
+		int commandBufferLow, value state, value clear) {
+
+		return LimeVulkanUnavailableBool ();
+
+	}
+
+
+	HL_PRIM bool HL_NAME(hl_vk_cmd_clear_attachments) (HL_CFFIPointer* window, int instanceHigh, int instanceLow, int deviceHigh,
+		int deviceLow, int commandBufferHigh, int commandBufferLow, hl_varray* state, hl_varray* clear) {
 
 		return LimeVulkanUnavailableBool ();
 
