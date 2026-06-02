@@ -9,6 +9,6 @@
 
 	<haxelib name="lime" />
 
-	<window width="64" height="64" fps="60" background="#000000" resizable="false" render-type="vulkan" />
+	<window width="64" height="64" fps="60" background="#000000" resizable="false" renderer="vulkan" />
 
 </project>

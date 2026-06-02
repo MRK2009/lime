@@ -1984,7 +1984,7 @@ class ProjectXMLParser extends HXProject
 				case "parameters", "title":
 					Reflect.setField(windows[id], name, Std.string(value));
 
-				case "render-type", "context-type":
+				case "renderer":
 					var renderType = Std.string(value).toLowerCase();
 					Reflect.setField(windows[id], "renderType", renderType);
 					if (renderType == "vulkan")
