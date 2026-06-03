@@ -37,6 +37,7 @@ class ALC
 	public static inline var CAPTURE_DEVICE_SPECIFIER:Int = 0x310;
 	public static inline var CAPTURE_DEFAULT_DEVICE_SPECIFIER:Int = 0x311;
 	public static inline var CAPTURE_SAMPLES:Int = 0x312;
+	public static inline var CONNECTED:Int = 0x313;
 
 	public static function closeDevice(device:ALDevice):Bool
 	{

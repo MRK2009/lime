@@ -32,6 +32,7 @@ class NativeAudioSource
 	#if lime_openalsoft
 	private static var hasDirectChannelsExt:Null<Bool>;
 	#end
+	private static var activeSources:Array<NativeAudioSource> = [];
 
 	private var buffers:Array<ALBuffer>;
 	private var bufferTimeBlocks:Array<Float>;
@@ -48,6 +49,15 @@ class NativeAudioSource
 	private var queuedBufferCount:Int;
 	private var readArray:UInt8Array;
 	private var readBuffer:Bytes;
+	private var recoveryCompleted:Bool;
+	private var recoveryGain:Float;
+	private var recoveryLength:Null<Int>;
+	private var recoveryLoops:Int;
+	private var recoveryPending:Bool;
+	private var recoveryPitch:Float;
+	private var recoveryPlaying:Bool;
+	private var recoveryPosition:Vector4;
+	private var recoveryTime:Int;
 	private var sdlSoundStream:CFFIPointer;
 	private var samples:Int;
 	private var stream:Bool;
@@ -64,10 +74,31 @@ class NativeAudioSource
 		this.parent = parent;
 
 		position = new Vector4();
+		activeSources.push(this);
+	}
+
+	@:allow(lime.media.AudioManager)
+	private static function prepareAudioContextRecovery():Void
+	{
+		for (source in activeSources.copy())
+		{
+			source.prepareAudioContextRecoverySource();
+		}
+	}
+
+	@:allow(lime.media.AudioManager)
+	private static function restoreAudioContextRecovery():Void
+	{
+		for (source in activeSources.copy())
+		{
+			source.restoreAudioContextRecoverySource();
+		}
 	}
 
 	public function dispose():Void
 	{
+		activeSources.remove(this);
+
 		if (handle != null)
 		{
 			stop();
@@ -195,7 +226,14 @@ class NativeAudioSource
 				if (parent.buffer.__srcBuffer != null)
 				{
 					AL.bufferData(parent.buffer.__srcBuffer, format, parent.buffer.data, parent.buffer.data.length, parent.buffer.sampleRate);
+					parent.buffer.__srcBufferContext = AudioManager.__contextGeneration;
 				}
+			}
+			else if (parent.buffer.__srcBufferContext != AudioManager.__contextGeneration)
+			{
+				parent.buffer.__srcBuffer = null;
+				init();
+				return;
 			}
 
 			dataLength = parent.buffer.data.length;
@@ -503,6 +541,84 @@ class NativeAudioSource
 		}
 
 		queuedBufferCount = 0;
+	}
+
+	private function prepareAudioContextRecoverySource():Void
+	{
+		if (parent.buffer == null)
+		{
+			recoveryPending = false;
+			return;
+		}
+
+		recoveryPending = true;
+		recoveryCompleted = completed;
+		recoveryGain = getGain();
+		recoveryLength = length;
+		recoveryLoops = loops;
+		recoveryPitch = getPitch();
+		recoveryPlaying = playing;
+		recoveryPosition = getPosition().clone();
+		recoveryTime = getCurrentTime();
+
+		if (streamTimer != null)
+		{
+			streamTimer.stop();
+			streamTimer = null;
+		}
+
+		if (timer != null)
+		{
+			timer.stop();
+			timer = null;
+		}
+
+		playing = false;
+		handle = null;
+		buffers = null;
+		bufferTimeBlocks = null;
+		queuedBufferCount = 0;
+
+		if (parent.buffer != null)
+		{
+			parent.buffer.__srcBuffer = null;
+			parent.buffer.__srcBufferContext = 0;
+		}
+
+		clearSDLSoundStream();
+		clearVorbisStream();
+	}
+
+	private function restoreAudioContextRecoverySource():Void
+	{
+		if (!recoveryPending || parent.buffer == null)
+		{
+			return;
+		}
+
+		recoveryPending = false;
+		completed = recoveryCompleted;
+		length = recoveryLength;
+		loops = recoveryLoops;
+		playing = false;
+
+		init();
+
+		if (handle == null)
+		{
+			return;
+		}
+
+		setGain(recoveryGain);
+		setPitch(recoveryPitch);
+		setPosition(recoveryPosition);
+		setCurrentTime(recoveryTime);
+		completed = recoveryCompleted;
+
+		if (recoveryPlaying)
+		{
+			play();
+		}
 	}
 
 	private function ensureReadBuffer(length:Int):Bool
