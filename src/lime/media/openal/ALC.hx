@@ -207,6 +207,20 @@ class ALC
 		#end
 	}
 
+	public static function isExtensionPresent(device:ALDevice, extname:String):Bool
+	{
+		if (extname == null)
+		{
+			return false;
+		}
+
+		#if (lime_cffi && lime_openal && !macro)
+		return NativeCFFI.lime_alc_is_extension_present(device, extname);
+		#else
+		return false;
+		#end
+	}
+
 	public static function captureOpenDevice(deviceName:String = null, frequency:Int, format:Int, bufferSize:Int):ALDevice
 	{
 		#if (lime_cffi && lime_openal && !macro)
