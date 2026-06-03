@@ -181,7 +181,7 @@ class Event<T>
 
 	private function get_timestamp():Int
 	{
-		#if lime_doc_gen
+		#if (lime_doc_gen || macro)
 		return (__timestamp != -1) ? __timestamp : 0;
 		#else
 		return (__timestamp != -1) ? __timestamp : lime.system.System.getTimer();

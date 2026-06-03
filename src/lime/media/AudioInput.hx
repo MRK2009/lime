@@ -135,6 +135,9 @@ class AudioInput
 
 	/**
 		Starts audio capture.
+
+		On backends that require asynchronous permission, such as HTML5,
+		`running` may become true after this method returns.
 	**/
 	public function start():Void
 	{
@@ -151,7 +154,7 @@ class AudioInput
 	**/
 	public function stop():Void
 	{
-		if (__disposed || !running)
+		if (__disposed)
 		{
 			return;
 		}
