@@ -1,12 +1,16 @@
 package lime.media;
 
 import haxe.Timer;
+#if (lime_cffi && !macro && lime_openal)
 import lime._internal.backend.native.NativeCFFI;
 import lime._internal.backend.native.NativeAudioSource;
+#end
+#if (!lime_doc_gen || lime_openal)
 import lime.media.openal.AL;
 import lime.media.openal.ALC;
 import lime.media.openal.ALContext;
 import lime.media.openal.ALDevice;
+#end
 #if (js && html5)
 import js.Browser;
 #end
@@ -19,9 +23,13 @@ import js.Browser;
 class AudioManager
 {
 	public static var context:AudioContext;
-	@:noCompletion public static var __contextGeneration(default, null):Int;
+	@:noCompletion public static var __contextGeneration(default, null):Int = 0;
 	private static inline var OUTPUT_DEVICE_POLL_TIME:Int = 1000;
+	#if (!lime_doc_gen || lime_openal)
 	private static var outputDevice:ALDevice;
+	#else
+	private static var outputDevice:Dynamic;
+	#end
 	private static var outputDeviceHasDisconnectExt:Bool;
 	private static var outputDeviceName:String;
 	private static var outputDevicePreferredName:String;
@@ -230,6 +238,7 @@ class AudioManager
 
 	private static function recoverOutputDevice(deviceName:String = null):Void
 	{
+		#if (lime_cffi && !macro && lime_openal)
 		if (outputDeviceRecovering || context == null || context.type != OPENAL)
 		{
 			return;
@@ -246,6 +255,7 @@ class AudioManager
 		}
 
 		outputDeviceRecovering = false;
+		#end
 	}
 
 	private static function refreshOutputDeviceRecovery():Void
