@@ -26,6 +26,7 @@ abstract WindowData({
 	@:optional var depthBuffer:Bool;
 	@:optional var stencilBuffer:Bool;
 	@:optional var title:String;
+	@:optional var transparent:Bool;
 	#if (js && html5)
 	@:optional var element:js.html.Element;
 	#end
@@ -61,6 +62,7 @@ abstract WindowData({
 		depthBuffer: false,
 		stencilBuffer: false,
 		title: "",
+		transparent: false,
 		#if (js && html5)
 		element: null,
 		#end

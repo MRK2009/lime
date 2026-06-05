@@ -149,6 +149,7 @@ class Window
 	#end
 	public var textInputEnabled(get, set):Bool;
 	public var title(get, set):String;
+	public var transparent(default, null):Bool;
 	public var alwaysOnTop(get, set):Bool;
 	public var visible(get, set):Bool;
 	public var width(get, set):Int;
@@ -236,6 +237,7 @@ class Window
 		__resizable = Reflect.hasField(__attributes, "resizable") ? __attributes.resizable : false;
 		__maximized = Reflect.hasField(__attributes, "maximized") ? __attributes.maximized : false;
 		__minimized = Reflect.hasField(__attributes, "minimized") ? __attributes.minimized : false;
+		transparent = Reflect.hasField(__attributes, "transparent") ? __attributes.transparent : false;
 		id = -1;
 		__backend = new WindowBackend(this);
 		if (id != -1 && application != null) application.__seedFrameConfiguration(__attributes);
