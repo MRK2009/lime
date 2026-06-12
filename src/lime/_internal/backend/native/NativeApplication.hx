@@ -463,11 +463,13 @@ class NativeApplication
 		for (window in parent.__windows)
 		{
 			if (window == null) continue;
-			if (!window.visible) continue;
 			// parent.renderer = renderer;
 			switch (renderEventInfo.type)
 			{
 				case RENDER:
+					#if lime_skip_invisible_windows
+					if (!window.visible) continue;
+					#end
 					if (window.context != null)
 					{
 						window.__backend.render();
