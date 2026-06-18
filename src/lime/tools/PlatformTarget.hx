@@ -201,6 +201,10 @@ class PlatformTarget
 
 	// Common functionality used by subclasses
 
+	/**
+		Copies all embedded assets into a temporary directory and sets their
+		`sourcePath`. This must happen before generating template contexts.
+	**/
 	private function prepareEmbeddedAssets():Void
 	{
 		var embedDirectory = Path.combine(targetDirectory, "obj/tmp");
@@ -217,6 +221,13 @@ class PlatformTarget
 		}
 	}
 
+	/**
+		Copies all non-embedded assets into the given directories.
+		@param outputDirectory The root directory for template assets.
+		@param assetDirectory The root directory for non-template assets. If not
+		an absolute path, interpreted relative to `outputDirectory`. If null,
+		defaults to `outputDirectory`.
+	**/
 	private function copyProjectAssets(outputDirectory:String, assetDirectory:String = null)
 	{
 		if (assetDirectory == null)
