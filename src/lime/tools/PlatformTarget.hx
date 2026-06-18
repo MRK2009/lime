@@ -228,8 +228,6 @@ class PlatformTarget
 			assetDirectory = Path.combine(outputDirectory, assetDirectory);
 		}
 
-		prepareEmbeddedAssets();
-
 		for (asset in project.assets)
 		{
 			var path = Path.combine(assetDirectory, asset.targetPath);
