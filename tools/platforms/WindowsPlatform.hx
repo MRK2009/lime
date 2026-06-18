@@ -954,6 +954,8 @@ class WindowsPlatform extends PlatformTarget
 
 		// project = project.clone ();
 
+		prepareEmbeddedAssets();
+
 		if (project.targetFlags.exists("xml"))
 		{
 			project.haxeflags.push("-xml " + targetDirectory + "/types.xml");

@@ -403,6 +403,8 @@ class AndroidPlatform extends PlatformTarget
 
 		// initialize (project);
 
+		prepareEmbeddedAssets();
+
 		var destination = targetDirectory + "/bin";
 		var sourceSet = destination + "/app/src/main";
 		System.mkdir(sourceSet);

@@ -201,6 +201,22 @@ class PlatformTarget
 
 	// Common functionality used by subclasses
 
+	private function prepareEmbeddedAssets():Void
+	{
+		var embedDirectory = Path.combine(targetDirectory, "obj/tmp");
+
+		for (asset in project.assets)
+		{
+			if (asset.type != AssetType.TEMPLATE && asset.embed == true && asset.sourcePath == "")
+			{
+				var path = Path.combine(embedDirectory, asset.targetPath);
+				System.mkdir(Path.directory(path));
+				AssetHelper.copyAsset(asset, path);
+				asset.sourcePath = path;
+			}
+		}
+	}
+
 	private function copyProjectAssets(outputDirectory:String, assetDirectory:String = null)
 	{
 		if (assetDirectory == null)
@@ -212,27 +228,27 @@ class PlatformTarget
 			assetDirectory = Path.combine(outputDirectory, assetDirectory);
 		}
 
-		var embedDirectory = Path.combine(targetDirectory, "obj/tmp");
+		prepareEmbeddedAssets();
 
 		for (asset in project.assets)
 		{
+			var path = Path.combine(assetDirectory, asset.targetPath);
+
 			if (asset.type == AssetType.TEMPLATE)
 			{
-				var path = Path.combine(outputDirectory, asset.targetPath);
+				path = Path.combine(outputDirectory, asset.targetPath);
 				System.mkdir(Path.directory(path));
 				AssetHelper.copyAsset(asset, path, project.templateContext);
 			}
+			else if (asset.embed == true)
+			{
+				if (FileSystem.exists(path) && !FileSystem.isDirectory(path))
+				{
+					System.deleteFile(path);
+				}
+			}
 			else
 			{
-				if (asset.embed == true && asset.sourcePath == "")
-				{
-					var path = Path.combine(embedDirectory, asset.targetPath);
-					System.mkdir(Path.directory(path));
-					AssetHelper.copyAsset(asset, path);
-					asset.sourcePath = path;
-				}
-
-				var path = Path.combine(assetDirectory, asset.targetPath);
 				System.mkdir(Path.directory(path));
 				AssetHelper.copyAssetIfNewer(asset, path);
 			}

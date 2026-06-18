@@ -375,6 +375,8 @@ class WebAssemblyPlatform extends PlatformTarget
 		var destination = targetDirectory + "/bin/";
 		System.mkdir(destination);
 
+		prepareEmbeddedAssets();
+
 		// for (asset in project.assets) {
 		//
 		// if (asset.type == AssetType.FONT) {
