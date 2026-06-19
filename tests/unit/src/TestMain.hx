@@ -2,8 +2,10 @@ import utest.Runner;
 import utest.ui.Report;
 import lime.app.Application;
 
-class TestMain extends Application {
-	public function new() {
+class TestMain extends Application
+{
+	public function new()
+	{
 		super();
 
 		var runner = new Runner();

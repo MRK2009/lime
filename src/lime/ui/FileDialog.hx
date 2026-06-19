@@ -99,10 +99,7 @@ class FileDialog
 				extension = extension.substr(1);
 			}
 
-			if (extension.length == 0
-				|| extension.indexOf("*") != -1
-				|| extension.indexOf("?") != -1
-				|| extension.indexOf("/") != -1
+			if (extension.length == 0 || extension.indexOf("*") != -1 || extension.indexOf("?") != -1 || extension.indexOf("/") != -1
 				|| extension.indexOf("\\") != -1)
 			{
 				continue;
@@ -132,9 +129,7 @@ class FileDialog
 		if (type == null) type = FileDialogType.OPEN;
 
 		#if sys
-		if (defaultPath != null && defaultPath.length > 0
-			&& FileSystem.exists(defaultPath)
-			&& FileSystem.isDirectory(defaultPath))
+		if (defaultPath != null && defaultPath.length > 0 && FileSystem.exists(defaultPath) && FileSystem.isDirectory(defaultPath))
 		{
 			// if the default path is a directory, and the default path doesn't
 			// end with a separator, tiny file dialogs may open its parent

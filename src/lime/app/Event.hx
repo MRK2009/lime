@@ -97,6 +97,7 @@ class Event<T>
 		takes two `Int` arguments, like `dispatch (1, 2);`
 	**/
 	public var dispatch:Dynamic;
+
 	@:noCompletion @:dox(hide) public var __dispatchWithTimestamp:Dynamic;
 
 	// macro public function dispatch (ethis:Expr, args:Array<Expr>):Void {

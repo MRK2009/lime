@@ -253,7 +253,8 @@ class NativeAudioSource
 		#if lime_openalsoft
 		if (hasDirectChannelsExt == null)
 		{
-			hasDirectChannelsExt = AL.isExtensionPresent("AL_SOFT_direct_channels") && AL.isExtensionPresent("AL_SOFT_direct_channels_remix");
+			hasDirectChannelsExt = AL.isExtensionPresent("AL_SOFT_direct_channels")
+				&& AL.isExtensionPresent("AL_SOFT_direct_channels_remix");
 		}
 
 		if (hasDirectChannelsExt)
@@ -1015,7 +1016,12 @@ class NativeAudioSource
 
 		refillBuffers();
 
-		if (playing && timer == null && streamExhausted && queuedBufferCount == 0 && handle != null && AL.getSourcei(handle, AL.SOURCE_STATE) != AL.PLAYING)
+		if (playing
+			&& timer == null
+			&& streamExhausted
+			&& queuedBufferCount == 0
+			&& handle != null
+			&& AL.getSourcei(handle, AL.SOURCE_STATE) != AL.PLAYING)
 		{
 			if (length == null && parent.buffer.__srcSDLSoundDuration <= 0)
 			{
@@ -1085,9 +1091,9 @@ class NativeAudioSource
 	{
 		// `setCurrentTime()` has side effects and is never safe to skip.
 		/* if (value == getCurrentTime())
-		{
-			return value;
-		} */
+			{
+				return value;
+		}*/
 
 		if (handle != null)
 		{

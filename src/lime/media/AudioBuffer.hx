@@ -396,7 +396,6 @@ class AudioBuffer
 		@return An `AudioBuffer` instance with the decoded audio data.
 	**/
 	#if lime_vorbis
-
 	public static function fromVorbisFile(vorbisFile:VorbisFile):AudioBuffer
 	{
 		if (vorbisFile == null) return null;
@@ -509,22 +508,19 @@ class AudioBuffer
 			var promise = new Promise<AudioBuffer>();
 			var request = new HTTPRequest<Bytes>();
 
-			request.load(path)
-				.onProgress(promise.progress)
-				.onComplete(function(bytes)
-				{
-					var buffer = fromBytesStream(bytes);
+			request.load(path).onProgress(promise.progress).onComplete(function(bytes)
+			{
+				var buffer = fromBytesStream(bytes);
 
-					if (buffer != null)
-					{
-						promise.complete(buffer);
-					}
-					else
-					{
-						promise.error("");
-					}
-				})
-				.onError(promise.error);
+				if (buffer != null)
+				{
+					promise.complete(buffer);
+				}
+				else
+				{
+					promise.error("");
+				}
+			}).onError(promise.error);
 
 			return promise.future;
 		}
@@ -694,7 +690,7 @@ class AudioBuffer
 			}
 		}).onError(function(_)
 		{
-			__loadFromFilesStream(paths, promise, index + 1);
+				__loadFromFilesStream(paths, promise, index + 1);
 		});
 	}
 

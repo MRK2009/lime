@@ -173,7 +173,8 @@ class NativeWindow
 				contextAttributes.hardware = true;
 				context.vulkan = new VulkanRenderContext(handle);
 				context.type = VULKAN;
-				context.version = Reflect.hasField(contextAttributes, "version") && contextAttributes.version != null ? contextAttributes.version : "";
+				context.version = Reflect.hasField(contextAttributes, "version")
+					&& contextAttributes.version != null ? contextAttributes.version : "";
 			default:
 				useHardware = false;
 

@@ -32,6 +32,7 @@ typedef WindowAttributes =
 		shared application frame profile.
 	**/
 	@:optional public var frameProfile:FrameProfile;
+
 	@:optional public var fullscreen:Bool;
 	@:optional public var height:Int;
 	@:optional public var hidden:Bool;

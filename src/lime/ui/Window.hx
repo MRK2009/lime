@@ -56,6 +56,7 @@ class Window
 	 * vertical-sync setting.
 	**/
 	public var vsyncMode(get, set):VSyncMode;
+
 	public var fullscreen(get, set):Bool;
 	public var height(get, set):Int;
 	public var hidden(get, null):Bool;

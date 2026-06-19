@@ -7,6 +7,7 @@ import lime.app.Event;
 @:fileXml('tags="haxe,release"')
 @:noDebug
 #end
+
 /**
 	The `AudioInput` class provides polling-based access to microphone or other
 	audio capture input.
