@@ -87,6 +87,27 @@ class EventMacro
 				args.push({name: argName, type: typeArgs[i].t.toComplexType()});
 			}
 
+			var rethrow = if (Context.defined("cpp"))
+			{
+				macro cpp.Lib.rethrow(e);
+			}
+			else if (Context.defined("neko"))
+			{
+				macro neko.Lib.rethrow(e);
+			}
+			else if (Context.defined("hl"))
+			{
+				macro hl.Api.rethrow(e);
+			}
+			else if (Context.defined("js"))
+			{
+				macro js.Lib.rethrow();
+			}
+			else
+			{
+				macro throw e;
+			}
+
 			var dispatch = macro
 				{
 					var previousTimestamp = __timestamp;
@@ -121,7 +142,7 @@ class EventMacro
 					catch (e:Dynamic)
 					{
 						__timestamp = previousTimestamp;
-						throw e;
+						$rethrow;
 					}
 
 					__timestamp = previousTimestamp;
@@ -161,7 +182,7 @@ class EventMacro
 					catch (e:Dynamic)
 					{
 						__timestamp = previousTimestamp;
-						throw e;
+						$rethrow;
 					}
 
 					__timestamp = previousTimestamp;
